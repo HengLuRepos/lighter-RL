@@ -8,4 +8,5 @@ TODO:
 - [ ] DDPG
 - [ ] TD3
 - [ ] A2C/A3C
-- [ ] SAC
+- [x] SAC
+- [ ] SAC-Discrete

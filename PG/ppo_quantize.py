@@ -16,13 +16,11 @@ class ValueNetwork(nn.Module):
         self.gamma = gamma
         self.lam = lamb
         self.device = device
-        self.quant = torch.quantization.QuantStub()
         self.l1 = nn.Linear(ob_size, 256)
         self.ac1 = nn.ReLU()
         self.l2 = nn.Linear(256, 256)
         self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, 1)
-        self.dequant = torch.quantization.DeQuantStub()
     def forward(self, x):
         x = np2torch(x).to(self.device)
         x = self.quant(x)
@@ -42,20 +40,15 @@ class ActionNetwork(nn.Module):
     def __init__(self, ob_size, act_size, device):
         super().__init__()
         self.device = device
-        self.quant = torch.quantization.QuantStub()
         self.l1 = nn.Linear(ob_size, 256)
         self.ac1 = nn.ReLU()
         self.l2 = nn.Linear(256, 256)
         self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, act_size)
-        self.dequant = torch.quantization.DeQuantStub()
     def forward(self, x):
-        x = np2torch(x).to(self.device)
-        x = self.quant(x)
         out = self.ac1(self.l1(x))
         out = self.ac2(self.l2(out))
         out = self.l3(out)
-        out = self.dequant(out)
         return out
 
 class GaussianPolicy(nn.Module):
@@ -63,34 +56,27 @@ class GaussianPolicy(nn.Module):
         super().__init__()
         self.device = device
         self.action_size = act_size
-        self.quant = torch.quantization.QuantStub()
         self.network = ActionNetwork(ob_size, act_size, self.device).to(self.device)
-        self.dequant = torch.quantization.DeQuantStub()
     def action_dist(self, x):
         mean = self(x)
         dist = ptd.MultivariateNormal(loc=mean, scale_tril=torch.eye(self.action_size, device=self.device))
         return dist
     def forward(self, x):
-        x = self.quant(np2torch(x)).to(self.device)
         mean = self.network(x).to(self.device)
-        return self.dequant(mean)
+        return mean
 class CategoricalPolicy(nn.Module):
     def __init__(self, ob_size, act_size, device):
         super().__init__()
         self.device = device
         self.action_size = act_size
-        self.quant = torch.quantization.QuantStub()
         self.network = ActionNetwork(ob_size, act_size, self.device).to(self.device)
-        self.dequant = torch.quantization.DeQuantStub()
     def action_dist(self, x):
         logits = self(x)
         dist = ptd.Categorical(logits=logits)
         return dist
     def forward(self, x):
-        x = np2torch(x).to(self.device)
-        x = self.quant(x)
         logits = self.network(x).to(self.device)
-        return self.dequant(logits)
+        return logits
 
 class PPO(nn.Module):
     def __init__(self, env, config, seed, device=device):

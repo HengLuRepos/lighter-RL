@@ -26,7 +26,7 @@ cali_start = time.time()
 ppo.evaluation()
 cali_end = time.time()
 
-torch.ao.quantization.convert(ppo, inplace=True)
+torch.quantization.convert(ppo, inplace=True)
 convert_cali_end = time.time()
 
 ppo.eval()
@@ -36,6 +36,6 @@ quant_end = time.time()
 
 print("fp32 eval time: {:.2f}".format(origin_end-origin_start))
 print("int8 eval time: {:.2f}".format(quant_end-quant_start))
-print("convert + cali time: {.2f}".format(convert_cali_end - convert_cali_start))
+print("convert + cali time: {:.2f}".format(convert_cali_end - convert_cali_start))
 print("cali time: {:.2f}".format(cali_end - cali_start))
 ppo.save_model("./models/ppo-{}-PTSQ.pt".format(env_name))

@@ -11,3 +11,4 @@ TODO:
 - [ ] A2C/A3C
 - [x] SAC
 - [ ] SAC-Discrete
+- [ ] TRPO

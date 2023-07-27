@@ -17,10 +17,10 @@ ppo.evaluation()
 origin_end = time.time()
 
 convert_cali_start = time.time()
-ppo.qconfig = torch.quantization.get_default_qconfig('x86')  
+ppo.qconfig = torch.ao.quantization.get_default_qconfig('x86')  
 torch.backends.quantized.engine = 'x86'
-torch.quantization.quantize_dtype = torch.qint8
-torch.quantization.prepare(ppo,inplace=True)
+torch.ao.quantization.quantize_dtype = torch.qint8
+torch.ao.quantization.prepare(ppo,inplace=True)
 
 cali_start = time.time()
 ppo.evaluation()

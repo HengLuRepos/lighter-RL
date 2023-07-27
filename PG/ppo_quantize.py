@@ -22,7 +22,7 @@ class ValueNetwork(nn.Module):
         self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, 1)
     def forward(self, x):
-        x = np2torch(x)
+        x = np2torch(x).to(self.device)
         out = self.ac1(self.l1(x))
         out = self.ac2(self.l2(out))
         return self.l3(out).squeeze()
@@ -43,7 +43,7 @@ class ActionNetwork(nn.Module):
         self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, act_size)
     def forward(self, x):
-        x = np2torch(x)
+        x = np2torch(x).to(self.device)
         out = self.ac1(self.l1(x))
         out = self.ac2(self.l2(out))
         return self.l3(out)
@@ -53,28 +53,28 @@ class GaussianPolicy(nn.Module):
         super().__init__()
         self.device = device
         self.action_size = act_size
-        self.network = ActionNetwork(ob_size, act_size, self.device)
+        self.network = ActionNetwork(ob_size, act_size, self.device).to(self.device)
     def action_dist(self, x):
         mean = self(x)
-        dist = ptd.MultivariateNormal(loc=mean, scale_tril=torch.eye(self.action_size))
+        dist = ptd.MultivariateNormal(loc=mean, scale_tril=torch.eye(self.action_size, device=self.device))
         return dist
     def forward(self, x):
-        x = np2torch(x)
-        mean = self.network(x)
+        x = np2torch(x).to(self.device)
+        mean = self.network(x).to(self.device)
         return mean
 class CategoricalPolicy(nn.Module):
     def __init__(self, ob_size, act_size, device):
         super().__init__()
         self.device = device
         self.action_size = act_size
-        self.network = ActionNetwork(ob_size, act_size, self.device)
+        self.network = ActionNetwork(ob_size, act_size, self.device).to(self.device)
     def action_dist(self, x):
         logits = self(x)
         dist = ptd.Categorical(logits=logits)
         return dist
     def forward(self, x):
-        x = np2torch(x)
-        logits = self.network(x)
+        x = np2torch(x).to(self.device)
+        logits = self.network(x).to(self.device)
         return logits
 
 class PPO(nn.Module):
@@ -96,8 +96,8 @@ class PPO(nn.Module):
         self.clip = self.config.clip
         self.v_lr = self.config.v_lr
         self.pi_lr = self.config.pi_lr
-        self.baseline = ValueNetwork(self.observation_size, self.gamma, self.lam, device=self.device)
-        self.policy = CategoricalPolicy(self.observation_size, self.action_size, device=self.device) if self.discrete else GaussianPolicy(self.observation_size, self.action_size, device=self.device)
+        self.baseline = ValueNetwork(self.observation_size, self.gamma, self.lam, device=self.device).to(self.device)
+        self.policy = CategoricalPolicy(self.observation_size, self.action_size, device=self.device).to(self.device) if self.discrete else GaussianPolicy(self.observation_size, self.action_size, device=self.device).to(self.device)
         
         self.opt_baseline = torch.optim.Adam(self.baseline.parameters(), lr=self.v_lr)
         self.opt_policy = torch.optim.Adam(self.policy.parameters(), lr=self.pi_lr)
@@ -154,11 +154,11 @@ class PPO(nn.Module):
         return np.concatenate(all_returns)
     
     def update_policy(self, states, actions, old_log_probs, advantages):
-        advantages = np2torch(advantages)
+        advantages = np2torch(advantages).to(self.device)
         dist = self.policy.action_dist(states)
-        actions = np2torch(actions)
+        actions = np2torch(actions).to(self.device)
         log_probs = dist.log_prob(actions)
-        r_theta = torch.exp(log_probs - np2torch(old_log_probs))
+        r_theta = torch.exp(log_probs - np2torch(old_log_probs).to(self.device))
         clip_r_theta = torch.clip(r_theta, 1.0 - self.clip, 1.0 + self.clip)
         loss = -(torch.min(torch.mul(r_theta, advantages), torch.mul(clip_r_theta, advantages))).mean()
         self.opt_policy.zero_grad()
@@ -166,7 +166,7 @@ class PPO(nn.Module):
         self.opt_policy.step()
     def update_baseline(self, returns, states):
         values = self.baseline(states)
-        returns = np2torch(returns)
+        returns = np2torch(returns).to(self.device)
         loss = torch.nn.functional.mse_loss(returns, values)
         self.opt_baseline.zero_grad()
         loss.backward()

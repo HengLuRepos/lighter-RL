@@ -7,14 +7,15 @@ import scipy
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 def np2torch(np_arr):
     np_arr = torch.from_numpy(np_arr) if isinstance(np_arr,np.ndarray) else np_arr
-    return np_arr.to(device).float()
+    return np_arr.float()
 def discount_cumsum(x, discount):
     return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 class ValueNetwork(nn.Module):
-    def __init__(self, ob_size, gamma, lamb):
+    def __init__(self, ob_size, gamma, lamb, device):
         super().__init__()
         self.gamma = gamma
         self.lam = lamb
+        self.device = device
         self.l1 = nn.Linear(ob_size, 256)
         self.ac1 = nn.ReLU()
         self.l2 = nn.Linear(256, 256)
@@ -33,8 +34,9 @@ class ValueNetwork(nn.Module):
         advantages = (advantages - np.mean(advantages)) / np.std(advantages)
         return advantages
 class ActionNetwork(nn.Module):
-    def __init__(self, ob_size, act_size):
+    def __init__(self, ob_size, act_size, device):
         super().__init__()
+        self.device = device
         self.l1 = nn.Linear(ob_size, 256)
         self.ac1 = nn.ReLU()
         self.l2 = nn.Linear(256, 256)
@@ -47,38 +49,41 @@ class ActionNetwork(nn.Module):
         return self.l3(out)
 
 class GaussianPolicy(nn.Module):
-    def __init__(self, ob_size, act_size):
+    def __init__(self, ob_size, act_size, device):
         super().__init__()
+        self.device = device
         self.action_size = act_size
-        self.network = ActionNetwork(ob_size, act_size).to(device)
+        self.network = ActionNetwork(ob_size, act_size, self.device)
     def action_dist(self, x):
         mean = self(x)
-        dist = ptd.MultivariateNormal(loc=mean, scale_tril=torch.eye(self.action_size, device=device))
+        dist = ptd.MultivariateNormal(loc=mean, scale_tril=torch.eye(self.action_size))
         return dist
     def forward(self, x):
         x = np2torch(x)
-        mean = self.network(x).to(device)
+        mean = self.network(x)
         return mean
 class CategoricalPolicy(nn.Module):
-    def __init__(self, ob_size, act_size):
+    def __init__(self, ob_size, act_size, device):
         super().__init__()
+        self.device = device
         self.action_size = act_size
-        self.network = ActionNetwork(ob_size, act_size).to(device)
+        self.network = ActionNetwork(ob_size, act_size, self.device)
     def action_dist(self, x):
         logits = self(x)
         dist = ptd.Categorical(logits=logits)
         return dist
     def forward(self, x):
         x = np2torch(x)
-        logits = self.network(x).to(device)
+        logits = self.network(x)
         return logits
 
 class PPO(nn.Module):
-    def __init__(self, env, config, seed):
+    def __init__(self, env, config, seed, device=device):
         super().__init__()
         self.env = env
         self.config = config
         self.seed = seed
+        self.device = device
         torch.manual_seed(seed=self.seed)
         self.env.reset(seed=seed)
 
@@ -91,8 +96,8 @@ class PPO(nn.Module):
         self.clip = self.config.clip
         self.v_lr = self.config.v_lr
         self.pi_lr = self.config.pi_lr
-        self.baseline = ValueNetwork(self.observation_size, self.gamma, self.lam).to(device)
-        self.policy = CategoricalPolicy(self.observation_size, self.action_size).to(device) if self.discrete else GaussianPolicy(self.observation_size, self.action_size).to(device)
+        self.baseline = ValueNetwork(self.observation_size, self.gamma, self.lam, device=self.device)
+        self.policy = CategoricalPolicy(self.observation_size, self.action_size, device=self.device) if self.discrete else GaussianPolicy(self.observation_size, self.action_size, device=self.device)
         
         self.opt_baseline = torch.optim.Adam(self.baseline.parameters(), lr=self.v_lr)
         self.opt_policy = torch.optim.Adam(self.policy.parameters(), lr=self.pi_lr)
@@ -167,7 +172,7 @@ class PPO(nn.Module):
         loss.backward()
         self.opt_baseline.step()
     
-    def train(self, env_name):
+    def training(self, env_name):
         best_avg = None
         for ep in range(self.config.epoch):
             paths, episodic_rewards = self.sample_batch()
@@ -202,17 +207,24 @@ class PPO(nn.Module):
         return out
     def evaluation(self):
         returns = []
-        for ep in range(10):
+        for ep in range(100):
             state, _ = self.env.reset()
             done = False
             ep_reward = 0
             while not done:
-                action = self(state).detach().cpu().numpy()
+                action = self(state[None,:]).detach().cpu().numpy().squeeze(axis=0)
                 state, reward, terminated, truncated, _ = self.env.step(action)
                 ep_reward += reward
                 done = terminated or truncated
             returns.append(ep_reward)
         print("Avg reward: {:.2f}".format(np.mean(returns)))
+    def fuse_model(self):
+        for m in self.modules():
+            if type(m) == ActionNetwork:
+                torch.quantization.fuse_modules(m, [['l1','ac1'],['l2','ac2']], inplace=True)
+            if type(m) == ValueNetwork:
+                torch.quantization.fuse_modules(m, [['l1','ac1'],['l2','ac2']], inplace=True)
+            
 
     def save_model(self, path):
         torch.save(self.state_dict(), path)

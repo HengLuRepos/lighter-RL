@@ -16,16 +16,21 @@ class ValueNetwork(nn.Module):
         self.gamma = gamma
         self.lam = lamb
         self.device = device
+        self.quant = torch.quantization.QuantStub()
         self.l1 = nn.Linear(ob_size, 256)
         self.ac1 = nn.ReLU()
         self.l2 = nn.Linear(256, 256)
         self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, 1)
+        self.dequant = torch.quantization.DeQuantStub()
     def forward(self, x):
         x = np2torch(x).to(self.device)
+        x = self.quant(x)
         out = self.ac1(self.l1(x))
         out = self.ac2(self.l2(out))
-        return self.l3(out).squeeze()
+        out = self.l3(out).squeeze()
+        out = self.dequant(out)
+        return out
     def calc_advantage(self, obs, next_obs, rewards):
         values = self(obs).detach().cpu().numpy()
         next_values = self(next_obs).detach().cpu().numpy()
@@ -37,45 +42,55 @@ class ActionNetwork(nn.Module):
     def __init__(self, ob_size, act_size, device):
         super().__init__()
         self.device = device
+        self.quant = torch.quantization.QuantStub()
         self.l1 = nn.Linear(ob_size, 256)
         self.ac1 = nn.ReLU()
         self.l2 = nn.Linear(256, 256)
         self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, act_size)
+        self.dequant = torch.quantization.DeQuantStub()
     def forward(self, x):
         x = np2torch(x).to(self.device)
+        x = self.quant(x)
         out = self.ac1(self.l1(x))
         out = self.ac2(self.l2(out))
-        return self.l3(out)
+        out = self.l3(out)
+        out = self.dequant(out)
+        return out
 
 class GaussianPolicy(nn.Module):
     def __init__(self, ob_size, act_size, device):
         super().__init__()
         self.device = device
         self.action_size = act_size
+        self.quant = torch.quantization.QuantStub()
         self.network = ActionNetwork(ob_size, act_size, self.device).to(self.device)
+        self.dequant = torch.quantization.DeQuantStub()
     def action_dist(self, x):
         mean = self(x)
         dist = ptd.MultivariateNormal(loc=mean, scale_tril=torch.eye(self.action_size, device=self.device))
         return dist
     def forward(self, x):
-        x = np2torch(x).to(self.device)
+        x = self.quant(np2torch(x)).to(self.device)
         mean = self.network(x).to(self.device)
-        return mean
+        return self.dequant(mean)
 class CategoricalPolicy(nn.Module):
     def __init__(self, ob_size, act_size, device):
         super().__init__()
         self.device = device
         self.action_size = act_size
+        self.quant = torch.quantization.QuantStub()
         self.network = ActionNetwork(ob_size, act_size, self.device).to(self.device)
+        self.dequant = torch.quantization.DeQuantStub()
     def action_dist(self, x):
         logits = self(x)
         dist = ptd.Categorical(logits=logits)
         return dist
     def forward(self, x):
         x = np2torch(x).to(self.device)
+        x = self.quant(x)
         logits = self.network(x).to(self.device)
-        return logits
+        return self.dequant(logits)
 
 class PPO(nn.Module):
     def __init__(self, env, config, seed, device=device):
@@ -101,6 +116,8 @@ class PPO(nn.Module):
         
         self.opt_baseline = torch.optim.Adam(self.baseline.parameters(), lr=self.v_lr)
         self.opt_policy = torch.optim.Adam(self.policy.parameters(), lr=self.pi_lr)
+        self.quant = torch.quantization.QuantStub()
+        self.dequant = torch.quantization.DeQuantStub()
 
     def sample_batch(self):
         i = 0
@@ -198,12 +215,15 @@ class PPO(nn.Module):
 
     def forward(self, ob):
         out = None
+        ob = np2torch(ob).to(self.device)
+        ob = self.quant(ob)
         if self.discrete:
             logits = self.policy(ob)
             probs = torch.nn.functional.softmax(logits, dim=0)
             out = torch.argmax(probs)
         else:
             out = self.policy(ob)
+        out = self.dequant(out)
         return out
     def evaluation(self):
         returns = []

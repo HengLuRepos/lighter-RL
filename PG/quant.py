@@ -4,10 +4,10 @@ import gymnasium as gym
 import torch
 import time
 
-env = gym.make("CartPole-v1")
+env = gym.make("HalfCheetah-v4")
 config = PendulumConfig()
 ppo = PPO(env, config, 2, device='cpu')
-ppo.load_model("./models/ppo-256-CartPole-best.pt")
+ppo.load_model("./models/ppo-256-HalfCheetah-best.pt")
 ppo.eval()
 
 origin_start = time.time()
@@ -25,5 +25,5 @@ ppo_int8.evaluation()
 quant_end = time.time()
 print("fp32 eval time: {:.2f}".format(origin_end-origin_start))
 print("int8 eval time: {:.2f}".format(quant_end-quant_start))
-ppo_int8.save_model("./models-ppo-qint8.pt")
+ppo_int8.save_model("./models/ppo-HalfCheetah-qint8.pt")
 

@@ -88,7 +88,7 @@ class ReplayBuffer:
     def __init__(self, config):
         self.max_len = config.buffer_size
         self.batch_size = config.batch_size
-        self.memory = deque(maxlen=self.max_len)
+        self.memory = deque(maxlen=self.max_len) if self.max_len is not None else deque()
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
@@ -141,6 +141,8 @@ class TwinDelayedDDPG(nn.Module):
         self.actor_optim = torch.optim.Adam(self.actor.parameters(), lr=self.config.pi_lr)
         self.q1_optim = torch.optim.Adam(self.q1.parameters(), lr=self.config.v_lr)
         self.q2_optim = torch.optim.Adam(self.q2.parameters(), lr=self.config.v_lr)
+
+        self.num_iter = 0
     
     def compute_targets(self, next_states, rewards, done):
         next_states = np2torch(next_states)
@@ -189,59 +191,68 @@ class TwinDelayedDDPG(nn.Module):
                 state, _ = self.env.reset()
     
     def train_agent(self):
-        self.initial_explore()
-        ep_rewards = []
-        best_return = None
-        for ep in range(self.config.epoch):
-            state, _ = self.env.reset()
-            for step in range(self.config.steps_per_epoch):
+        episode_reward = 0
+        episode_timesteps = 0
+        episode_num = 0
+        state, _ = self.env.reset()
+        done = False
+        for t in range(self.config.max_timestamp):
+            episode_timesteps += 1
+            if t < self.config.start_steps:
+                action = self.env.action_space.sample()
+            else:
                 action = self.actor.explore(state).detach().cpu().numpy()
-                next_state, reward, terminated, truncated, _ = self.env.step(action)
-                done = terminated or truncated
-                self.buffer.remember(state, action, reward, next_state, done)
-                state = next_state
-                if done:
-                    state, _ = self.env.reset()
+            next_state, reward, terminated, truncated, _ = self.env.step(action)
+            done = terminated or truncated
+            self.buffer.remember(state, action, reward, next_state, done)
+            state = next_state
+            episode_reward += reward
 
-            for j in range(self.config.update_freq):
-                states, actions, rewards, next_states, done = self.buffer.sample()
-                self.update_q(states, actions, next_states, rewards, done)
-                if j % self.config.policy_delay == 0:
-                    self.update_actor(states)
-                    self.q1_targ.soft_update(self.q1)
-                    self.q2_targ.soft_update(self.q2)
-                    self.actor_target.soft_update(self.actor)
+            if t >= self.config.start_steps:
+                self.train_iter()
+            if done:
+                print(f"Total T: {t+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
+                state, _ = self.env.reset()
+                done = False
+                episode_reward = 0
+                episode_timesteps = 0
+                episode_num += 1
+            if (t + 1) % self.config.eval_freq == 0:
+                self.evaluation()
+                self.save_model(f"models/TD3-{self.config.env_name}-seed-{self.seed}.pt")
 
-            state, _ = self.env.reset()
-            done = False
-            ep_reward = 0
-            while not done:
-                action = self.actor(np2torch(state)).detach().cpu().numpy()
-                state, reward, terminated, truncated, _ = self.env.step(action)
-                done = terminated or truncated
-                ep_reward += reward
-            if best_return is None or ep_reward >= max(ep_rewards):
-                best_return = ep_reward
-                self.save_model("models/TD3-{}-seed-{}-best.pt".format(self.config.env_name, self.seed))
-            self.save_model("models/TD3-{}-seed-{}.pt".format(self.config.env_name, self.seed))
-            ep_rewards.append(ep_reward)
-            print("Epoch {}: Episodic return: {:.2f}".format(ep, ep_reward))
-        print("Maximun Ep return: {:.2f}".format(max(ep_rewards)))
+
+    def train_iter(self):
+        self.num_iter += 1
+        states, actions, rewards, next_states, done = self.buffer.sample()
+        self.update_q(states, actions, next_states, rewards, done)
+        
+        if self.num_iter % self.config.policy_delay == 0:
+            self.update_actor(states)
+            self.q1_targ.soft_update(self.q1)
+            self.q2_targ.soft_update(self.q2)
+            self.actor_target.soft_update(self.actor)
+
+
     
     def evaluation(self):
-        results = []
-        for ep in range(self.config.eval_epochs):
-            ep_return = 0
-            state, _ = self.env.reset()
+        env = gym.make(self.config.env)
+        ep_reward = 0
+        state, _ = env.reset(seed = self.config.seed + 100)
+        for i in range(self.config.eval_epochs):
+            state, _ = env.reset()
             done = False
             while not done:
                 action = self.actor(np2torch(state)).detach().cpu().numpy()
-                state, reward, terminated, truncated, _ = self.env.step(action)
+                state, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
-                ep_return = self.gamma * ep_return + reward
-            results.append(ep_return)
-        print("Avg Episodic Return: {:.2f}".format(np.mean(results)))
-        return results
+                ep_reward += reward
+            state, _ = env.reset()
+            done = False
+        print("---------------------------------------")
+        print(f"Evaluation over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
+        print("---------------------------------------")
+
 
     
     def save_model(self, path):

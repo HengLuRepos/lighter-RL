@@ -7,7 +7,7 @@ First steps: implementations of following algorithms
 TODO:
 - [x] PPO
 - [ ] DDPG
-- [ ] TD3
+- [x] TD3
 - [ ] A2C/A3C
 - [x] SAC
 - [ ] SAC-Discrete

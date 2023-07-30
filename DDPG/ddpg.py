@@ -6,6 +6,9 @@ import gymnasium as gym
 import torch.nn.functional as F
 from collections import deque
 import random
+"""
+    This implementaion follows the DDPG used in TD3 paper.
+"""
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 def np2torch(np_arr):
     np_arr = torch.from_numpy(np_arr) if isinstance(np_arr,np.ndarray) else np_arr
@@ -221,9 +224,3 @@ class DDPG(nn.Module):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
         self.load_state_dict(torch.load(path))
-
-from config import InvertedPendulumConfig
-config = InvertedPendulumConfig(1)
-env = gym.make(config.env)
-agent = DDPG(env, config)
-agent.train_agent()

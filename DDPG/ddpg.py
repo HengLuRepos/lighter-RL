@@ -162,6 +162,10 @@ class DDPG(nn.Module):
         loss.backward()
         self.actor_optim.step()
     
+    def forward(self, state):
+        out = self.actor(state)
+        return out
+    
     def train_agent(self):
         episode_reward = 0
         episode_timesteps = 0

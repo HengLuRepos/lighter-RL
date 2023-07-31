@@ -179,6 +179,10 @@ class TwinDelayedDDPG(nn.Module):
         loss.backward()
         self.actor_optim.step()
     
+    def forward(self, state):
+        out = self.actor(state)
+        return out
+    
     def initial_explore(self):
         state, _ = self.env.reset()
         for step in range(self.config.start_steps):

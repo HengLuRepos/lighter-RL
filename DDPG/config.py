@@ -43,5 +43,4 @@ class AntConfig(Config):
         self.env = "Ant-v4"
         self.seed = seed
         self.env_name = "Ant"
-        self.gamma = 1.0
         self.start_steps = 25000

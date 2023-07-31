@@ -8,12 +8,8 @@ class Config:
         self.tau = 0.005
         self.v_lr = 3e-4
         self.pi_lr = 3e-4
-        self.gamma = 1.0
+        self.gamma = 0.99
         self.policy_delay = 2
-        #self.update_freq = 10
-        #self.epoch = 2000
-        #self.steps_per_epoch = 5000
-        #self.start_steps = 10000
         self.eval_epochs = 10
 
         self.max_timestamp = 1000000
@@ -53,7 +49,7 @@ class AntConfig(Config):
         self.env = "Ant-v4"
         self.seed = seed
         self.env_name = "Ant"
-        self.gamma = 1.0
+        self.gamma = 0.99
         self.epoch = 3000
         self.start_steps = 25000
         self.update_freq = 20

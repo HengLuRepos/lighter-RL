@@ -195,7 +195,7 @@ class DDPG(nn.Module):
                 episode_num += 1
             if (t + 1) % self.config.eval_freq == 0:
                 self.evaluation()
-                self.save_model(f"models/TD3-{self.config.env_name}-seed-{self.seed}.pt")
+                self.save_model(f"models/DDPG-{self.config.env_name}-seed-{self.seed}.pt")
 
     def train_iter(self):
         self.num_iter += 1

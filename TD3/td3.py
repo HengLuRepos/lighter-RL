@@ -195,6 +195,8 @@ class TwinDelayedDDPG(nn.Module):
                 state, _ = self.env.reset()
     
     def train_agent(self):
+        eval_x = []
+        eval_y = []
         episode_reward = 0
         episode_timesteps = 0
         episode_num = 0
@@ -222,9 +224,13 @@ class TwinDelayedDDPG(nn.Module):
                 episode_timesteps = 0
                 episode_num += 1
             if (t + 1) % self.config.eval_freq == 0:
-                self.evaluation()
+                eval_x.append(t)
+                res = self.evaluation()
+                eval_y.append(res)
                 self.save_model(f"models/TD3-{self.config.env_name}-seed-{self.seed}.pt")
-
+        eval_x = np.array(eval_x)
+        eval_y = np.array(eval_y)
+        np.savez(f"results/{self.config.env_name}-seed-{self.seed}.npz", x=eval_x, y=eval_y)
 
     def train_iter(self):
         self.num_iter += 1
@@ -256,6 +262,7 @@ class TwinDelayedDDPG(nn.Module):
         print("---------------------------------------")
         print(f"Evaluation over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
         print("---------------------------------------")
+        return ep_reward/self.config.eval_epochs
 
 
     

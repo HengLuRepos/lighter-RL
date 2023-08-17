@@ -1,8 +1,8 @@
-from td3 import TwinDelayedDDPG
+from ddpg import DDPG
 from config import *
 import gymnasium as gym
 
-config = AntConfig(1)
+config = SwimmerConfig(1)
 env = gym.make(config.env)
-agent = TwinDelayedDDPG(env, config)
+agent = DDPG(env, config)
 agent.train_agent()

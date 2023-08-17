@@ -44,3 +44,99 @@ class AntConfig(Config):
         self.seed = seed
         self.env_name = "Ant"
         self.start_steps = 25000
+
+class HopperConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.a_low = -1.0
+        self.a_high = 1.0
+        self.env = "Hopper-v4"
+        self.seed = seed
+        self.env_name = "Hopper"
+        self.gamma = 0.99
+        self.start_steps = 25000
+        self.steps_per_epoch = 3000
+
+class HumanoidConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.a_low = -0.4
+        self.a_high = 0.4
+        self.env = "Humanoid-v4"
+        self.seed = seed
+        self.env_name = "Humanoid"
+        self.gamma = 0.99
+        self.start_steps = 25000
+        self.steps_per_epoch = 3000
+
+class HumanoidStandupConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.a_low = -0.4
+        self.a_high = 0.4
+        self.env = "HumanoidStandup-v4"
+        self.seed = seed
+        self.env_name = "HumanoidStandup"
+        self.gamma = 0.99
+        self.start_steps = 25000
+        self.steps_per_epoch = 3000
+
+class InvertedDoublePendulumConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.a_low = -1.0
+        self.a_high = 1.0
+        self.env = "InvertedDoublePendulum-v4"
+        self.seed = seed
+        self.env_name = "InvertedDoublePendulum"
+        self.gamma = 0.99
+        self.start_steps = 1000
+        self.steps_per_epoch = 3000
+
+class PusherConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.a_low = -2.0
+        self.a_high = 2.0
+        self.env = "Pusher-v4"
+        self.seed = seed
+        self.env_name = "Pusher"
+        self.gamma = 0.99
+        self.start_steps = 2500
+        self.steps_per_epoch = 3000
+
+class ReacherConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.a_low = -1.0
+        self.a_high = 1.0
+        self.env = "Reacher-v4"
+        self.seed = seed
+        self.env_name = "Reacher"
+        self.gamma = 0.99
+        self.start_steps = 25000
+        self.steps_per_epoch = 3000
+
+class SwimmerConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.a_low = -1.0
+        self.a_high = 1.0
+        self.env = "Swimmer-v4"
+        self.seed = seed
+        self.env_name = "Swimmer"
+        self.gamma = 0.99
+        self.start_steps = 25000
+        self.steps_per_epoch = 3000
+
+class Walker2DConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.a_low = -1.0
+        self.a_high = 1.0
+        self.env = "Walker2d-v4"
+        self.seed = seed
+        self.env_name = "Walker2d"
+        self.gamma = 0.99
+        self.start_steps = 25000
+        self.steps_per_epoch = 3000

@@ -117,6 +117,8 @@ class TwinDelayedDDPG(nn.Module):
         
         torch.manual_seed(self.seed)
         np.random.seed(seed=self.seed)
+        random.seed(self.seed)
+        
         self.env.reset(seed=self.seed)
         self.env.action_space.seed(self.seed)
 

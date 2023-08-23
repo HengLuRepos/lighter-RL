@@ -1,5 +1,5 @@
 from ddpg_quantize import DDPG
-from config import HalfCheetahConfig, InvertedPendulumConfig, AntConfig
+from config import *
 import gymnasium as gym
 import torch
 import time
@@ -13,7 +13,7 @@ fp32_return = []
 int8_return = []
 
 for i in range(len(seed)):
-    config = InvertedPendulumConfig(seed[i])
+    config = SwimmerConfig(seed[i])
     env = gym.make(config.env)
     td3 = DDPG(env, config)
     td3.load_model(f"models/DDPG-{config.env_name}-seed-1.pt")
@@ -38,7 +38,7 @@ for i in range(len(seed)):
     int8_return.append(avg_return_int8)
     fp32_step.append(steps_origin)
     int8_step.append(steps_quant)
-    
+
 print(f"#### Task: {config.env_name}")
 print()
 print("|                     | fp32               | int8               |")

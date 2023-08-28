@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import numpy as np
-import matplotlib.pylab as plt
 import torch.distributions as ptd
 import gymnasium as gym
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
@@ -136,5 +135,3 @@ config = InvertedPendulumConfig(seed=1)
 env_ = gym.make(config.env)
 agent = A2C(env_, config)
 agent.train_agent()
-
-

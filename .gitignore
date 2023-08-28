@@ -3,3 +3,5 @@ models/
 SAC/
 PPO/
 results/
+A3C/
+TRPO/

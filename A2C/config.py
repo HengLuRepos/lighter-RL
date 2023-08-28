@@ -1,18 +1,17 @@
 class Config:
     def __init__(self):
         self.buffer_size = None
-        self.batch_size = 256
-        self.explore_noise = 0.1
-        self.target_noise = 0.2
-        self.noise_clip = 0.5
-        self.tau = 0.005
-        self.v_lr = 1e-4
-        self.pi_lr = 1e-4
-        self.gamma = 0.99
+        self.batch_size = 2000
+        self.v_lr = 5e-3
+        self.pi_lr = 5e-3
+        self.gamma = 0.90
         self.eval_epochs = 10
-
+        self.lam = 0.90
         self.max_timestamp = 1000000
         self.eval_freq = 5000
+        self.max_ep_len = 200
+        self.num_epoch = 500
+        self.layer_size = 64
 
 class InvertedPendulumConfig(Config):
     def __init__(self, seed):
@@ -20,10 +19,16 @@ class InvertedPendulumConfig(Config):
 
         self.a_low = -3.0
         self.a_high = 3.0
-        self.start_steps = 1000
         self.env = "InvertedPendulum-v4"
         self.seed = seed
         self.env_name = "InvertedPendulum"
+        self.max_ep_len = 1000
+        self.gamma = 0.95
+        self.v_lr = 0.01
+        self.pi_lr = 0.01
+        self.batch_size = 5000
+        self.layer_size = 64
+        self.num_epoch = 100
 
 class HalfCheetahConfig(Config):
     def __init__(self, seed):
@@ -35,8 +40,12 @@ class HalfCheetahConfig(Config):
         self.seed = seed
         self.env_name = "HalfCheetah"
 
-        self.start_steps = 25000
-        self.steps_per_epoch = 3000
+        self.max_ep_len = 150
+        self.num_epoch = 150
+        self.batch_size = 30000
+        self.layer_size = 32
+        self.v_lr = 0.02
+        self.pi_lr = 0.02
 
 class AntConfig(Config):
     def __init__(self, seed):
@@ -82,8 +91,7 @@ class HumanoidStandupConfig(Config):
         self.seed = seed
         self.env_name = "HumanoidStandup"
         self.gamma = 0.99
-        self.start_steps = 25000
-        self.steps_per_epoch = 3000
+
 
 class InvertedDoublePendulumConfig(Config):
     def __init__(self, seed):
@@ -94,8 +102,7 @@ class InvertedDoublePendulumConfig(Config):
         self.seed = seed
         self.env_name = "InvertedDoublePendulum"
         self.gamma = 0.99
-        self.start_steps = 1000
-        self.steps_per_epoch = 3000
+
 
 class PusherConfig(Config):
     def __init__(self, seed):
@@ -106,8 +113,7 @@ class PusherConfig(Config):
         self.seed = seed
         self.env_name = "Pusher"
         self.gamma = 0.99
-        self.start_steps = 2500
-        self.steps_per_epoch = 3000
+
 
 class ReacherConfig(Config):
     def __init__(self, seed):
@@ -118,8 +124,7 @@ class ReacherConfig(Config):
         self.seed = seed
         self.env_name = "Reacher"
         self.gamma = 0.99
-        self.start_steps = 25000
-        self.steps_per_epoch = 3000
+
 
 class SwimmerConfig(Config):
     def __init__(self, seed):
@@ -130,8 +135,7 @@ class SwimmerConfig(Config):
         self.seed = seed
         self.env_name = "Swimmer"
         self.gamma = 0.99
-        self.start_steps = 25000
-        self.steps_per_epoch = 3000
+
 
 class Walker2DConfig(Config):
     def __init__(self, seed):
@@ -142,5 +146,3 @@ class Walker2DConfig(Config):
         self.seed = seed
         self.env_name = "Walker2d"
         self.gamma = 0.99
-        self.start_steps = 25000
-        self.steps_per_epoch = 3000

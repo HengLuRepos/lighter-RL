@@ -187,12 +187,3 @@ class A2C(nn.Module):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
         self.load_state_dict(torch.load(path))
-            
-
-from config import *
-config = InvertedPendulumConfig(seed=1)
-env_ = gym.make(config.env)
-agent = A2C(env_, config)
-agent.train_agent()
-
-

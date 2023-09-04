@@ -8,7 +8,8 @@ TODO:
 - [x] PPO
 - [x] DDPG
 - [x] TD3
-- [ ] A2C/A3C
+- [x] A2C
+- [ ] A3C
 - [x] SAC
 - [ ] SAC-Discrete
-- [ ] TRPO
+- [x] TRPO

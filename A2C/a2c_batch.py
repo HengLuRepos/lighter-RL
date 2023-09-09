@@ -9,6 +9,13 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 def np2torch(np_arr):
     np_arr = torch.from_numpy(np_arr) if isinstance(np_arr,np.ndarray) else np_arr
     return np_arr.to(device).float()
+""" def discount_cumsum(x: torch.Tensor, discount):
+    sum = 0.0
+    result = torch.zeros_like(x)
+    for i in range(len(x) - 1, -1, -1):
+        sum = discount * sum + x[i]
+        result[i] = sum
+    return result """
 def discount_cumsum(x, discount):
     return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 #currently only for continuous actions

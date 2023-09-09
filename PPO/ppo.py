@@ -21,7 +21,6 @@ class ValueNetwork(nn.Module):
         self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, 1)
     def forward(self, x):
-        x = np2torch(x)
         out = self.ac1(self.l1(x))
         out = self.ac2(self.l2(out))
         return self.l3(out).squeeze()
@@ -41,7 +40,6 @@ class ActionNetwork(nn.Module):
         self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, act_size)
     def forward(self, x):
-        x = np2torch(x)
         out = self.ac1(self.l1(x))
         out = self.ac2(self.l2(out))
         return self.l3(out)
@@ -56,7 +54,6 @@ class GaussianPolicy(nn.Module):
         dist = ptd.MultivariateNormal(loc=mean, scale_tril=torch.eye(self.action_size, device=device))
         return dist
     def forward(self, x):
-        x = np2torch(x)
         mean = self.network(x).to(device)
         return mean
 class CategoricalPolicy(nn.Module):
@@ -69,7 +66,6 @@ class CategoricalPolicy(nn.Module):
         dist = ptd.Categorical(logits=logits)
         return dist
     def forward(self, x):
-        x = np2torch(x)
         logits = self.network(x).to(device)
         return logits
 
@@ -107,7 +103,7 @@ class PPO(nn.Module):
             episode_reward = 0
             for step in range(self.config.max_ep_len):
                 states.append(state)
-                dist = self.policy.action_dist(state)
+                dist = self.policy.action_dist(np2torch(state))
                 action = dist.sample()
                 log_prob = dist.log_prob(action)
                 action = action.detach().cpu().numpy()
@@ -150,7 +146,7 @@ class PPO(nn.Module):
     
     def update_policy(self, states, actions, old_log_probs, advantages):
         advantages = np2torch(advantages)
-        dist = self.policy.action_dist(states)
+        dist = self.policy.action_dist(np2torch(states))
         actions = np2torch(actions)
         log_probs = dist.log_prob(actions)
         r_theta = torch.exp(log_probs - np2torch(old_log_probs))
@@ -160,7 +156,7 @@ class PPO(nn.Module):
         loss.backward()
         self.opt_policy.step()
     def update_baseline(self, returns, states):
-        values = self.baseline(states)
+        values = self.baseline(np2torch(states))
         returns = np2torch(returns)
         loss = torch.nn.functional.mse_loss(returns, values)
         self.opt_baseline.zero_grad()
@@ -207,7 +203,7 @@ class PPO(nn.Module):
             done = False
             ep_reward = 0
             while not done:
-                action = self(state).detach().cpu().numpy()
+                action = self(np2torch(state)).detach().cpu().numpy()
                 state, reward, terminated, truncated, _ = self.env.step(action)
                 ep_reward += reward
                 done = terminated or truncated

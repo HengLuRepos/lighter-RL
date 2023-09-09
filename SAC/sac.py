@@ -33,7 +33,6 @@ class ReGaussianPolicy(nn.Module):
         self.alpha_opt = torch.optim.Adam([self.log_alpha], lr=self.config.pi_lr)
         self.alpha = torch.exp(self.log_alpha).to(device)
     def forward(self, obs, require_logprob=True):
-        obs = np2torch(obs)
         mean = self.mu_network(obs).to(device)
         log_std = self.log_network(obs).to(device)
         std = torch.exp(log_std).to(device)
@@ -78,13 +77,8 @@ class SoftQNetwork(nn.Module):
 
     def forward(self, obs, actions):
         # work for batched version.
-        x = None
-        if isinstance(actions, np.ndarray):
-            x = np.concatenate([obs, actions], axis=1)
-        else:
-            obs = np2torch(obs)
-            x = torch.cat((obs, actions), 1)
-        out = self.network(np2torch(x))
+        x = torch.cat((obs, actions), 1)
+        out = self.network(x)
         out = out.view(out.size(0), -1)
         return out
     
@@ -121,7 +115,6 @@ class SoftCritic(nn.Module):
                 param1.copy_(self.tau * param2 + (1.0 - self.tau) * param1)
 
     def forward(self, states):
-        states = np2torch(states)
         out = self.network(states)
         out = out.view(out.size(0), -1)
         return out
@@ -180,11 +173,9 @@ class SAC(nn.Module):
 
         self.gamma = self.config.gamma
     def forward(self, state, deterministic=False):
-        state = np2torch(state)
         action, _, action_d = self.actor(state, require_logprob=False)
-        action = action.detach().cpu().numpy()
         if deterministic:
-            return action_d.detach().cpu().numpy()
+            return action_d
         return action
     
     def train(self):
@@ -192,7 +183,7 @@ class SAC(nn.Module):
         for i in range(self.config.num_iter):
             state, _ = self.env.reset()
             for step in range(self.config.explore_step):
-                action = self(state)
+                action = self(np2torch(state)).detach().cpu().numpy()
                 next_state, reward, terminated, truncated, _ = self.env.step(action)
                 done = terminated or truncated
                 self.buffer.remember(state, action, reward, next_state, done)
@@ -204,6 +195,8 @@ class SAC(nn.Module):
                 states, actions, rewards, next_states, done = self.buffer.sample()
                 q_targets = rewards + self.gamma * (1.0 - done) * self.critic_target(next_states).detach().squeeze().cpu().numpy()
                 q_targets = np2torch(q_targets)
+                states = np2torch(states)
+                actions = np2torch(actions)
                 actions_sampled, logprobs_sampled, _ = self.actor(states)
                 q1 = self.q1(states, actions_sampled).to(device)
                 q2 = self.q2(states, actions_sampled).to(device)
@@ -222,7 +215,7 @@ class SAC(nn.Module):
             episodic_reward = 0
             done = False
             while not done:
-                action = self(state, deterministic=True)
+                action = self(np2torch(state), deterministic=True).detach().cpu().numpy()
                 next_state, reward, terminated, truncated, _ = self.env.step(action)
                 episodic_reward = reward + self.gamma * episodic_reward
                 state = next_state

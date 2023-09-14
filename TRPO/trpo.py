@@ -228,7 +228,8 @@ class TRPO(nn.Module):
             print(f"Iter {ep}: Avg reward:{avg_reward:.2f}")
             if (ep + 1) % 5 == 0:
                 self.evaluation(ep + 1)
-        print("Best Avg reward: {:.2f}".format(best_avg))
+                self.save_model(f"models/trpo-{self.config.env_name}-seed-{self.seed}.pt")
+        print(f"{self.config.env_name} Best Avg reward: {best_avg:.2f}")
     
     def evaluation(self, t):
         env = gym.make(self.config.env)
@@ -250,10 +251,3 @@ class TRPO(nn.Module):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
         self.load_state_dict(torch.load(path))
-
-            
-from config import *
-config = HalfCheetahConfig(seed=1)
-env = gym.make(config.env)
-agent = TRPO(env, config)
-agent.train_agent()    

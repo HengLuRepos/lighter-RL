@@ -5,7 +5,7 @@ import matplotlib.pylab as plt
 import torch.distributions as ptd
 import gymnasium as gym
 import scipy
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
+device = 'cpu' if torch.cuda.is_available() else 'cpu'
 def np2torch(np_arr) -> torch.Tensor:
     np_arr = torch.from_numpy(np_arr) if isinstance(np_arr,np.ndarray) else np_arr
     return np_arr.to(device).float()
@@ -227,25 +227,28 @@ class TRPO(nn.Module):
                 self.save_model(f"models/trpo-{self.config.env_name}-seed-{self.seed}-best.pt")
             print(f"Iter {ep}: Avg reward:{avg_reward:.2f}")
             if (ep + 1) % 5 == 0:
-                self.evaluation(ep + 1)
+                self.evaluation()
                 self.save_model(f"models/trpo-{self.config.env_name}-seed-{self.seed}.pt")
         print(f"{self.config.env_name} Best Avg reward: {best_avg:.2f}")
     
-    def evaluation(self, t):
+    def evaluation(self):
         env = gym.make(self.config.env)
         ep_reward = 0
         state, _ = env.reset(seed = self.config.seed + 100)
+        steps = 0
         for i in range(self.config.eval_epochs):
             state, _ = env.reset()
             done = False
             while not done:
-              action = self(np2torch(state)).detach().cpu().numpy()
+              action = self(np2torch(state[None,:])).detach().cpu().numpy().squeeze(axis=0)
               state, reward, terminated, truncated, _ = env.step(action)
               ep_reward += reward
               done = terminated or truncated
+              steps += 1
         print("---------------------------------------")
-        print(f"Evaluation at epoch {t} over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
+        print(f"Evaluation over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
         print("---------------------------------------")
+        return ep_reward/self.config.eval_epochs, steps/self.config.eval_epochs
     
     def save_model(self, path):
         torch.save(self.state_dict(), path)

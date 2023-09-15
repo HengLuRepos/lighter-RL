@@ -5,7 +5,7 @@ import matplotlib.pylab as plt
 import torch.distributions as ptd
 import gymnasium as gym
 import scipy
-device = 'cpu' if torch.cuda.is_available() else 'cpu'
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
 def np2torch(np_arr) -> torch.Tensor:
     np_arr = torch.from_numpy(np_arr) if isinstance(np_arr,np.ndarray) else np_arr
     return np_arr.to(device).float()
@@ -30,6 +30,9 @@ class Actor(nn.Module):
         out = self.out(out)
         std = torch.exp(self.log_std)
         return out, std
+    def fuse_modules(self):
+        torch.ao.quantization.fuse_modules(self, ['l1', 'ac1'], inplace=True)
+        torch.ao.quantization.fuse_modules(self, ['l2', 'ac2'], inplace=True)
     
 class Critic(nn.Module):
     def __init__(self, ob_dim, layer_size):
@@ -46,6 +49,9 @@ class Critic(nn.Module):
         out = self.ac2(self.l2(out))
         out = self.l3(out)
         return out.squeeze()
+    def fuse_modules(self):
+        torch.ao.quantization.fuse_modules(self, ['l1', 'ac1'], inplace=True)
+        torch.ao.quantization.fuse_modules(self, ['l2', 'ac2'], inplace=True)
     
 class TRPO(nn.Module):
     def __init__(self, env, config):
@@ -69,10 +75,16 @@ class TRPO(nn.Module):
         self.tol = self.config.tol
         self.backtrack_steps = self.config.backtrack_steps
 
+        self.quant_input = torch.ao.quantization.QuantStub()
+        self.dequant_output = torch.ao.quantization.DeQuantStub()
+
         self.critic_optim = torch.optim.Adam(self.critic.parameters(), lr=self.config.v_lr)
     
     def forward(self, state):
-        return self.actor(state)[0]
+        out = self.quant_input(state)
+        out = self.actor(out)[0]
+        out = self.dequant_output(out)
+        return out
 
     def calc_advantage(self, ob, next_ob, rewards, done):
         values = self.critic(np2torch(ob)).detach().cpu().numpy()

@@ -12,7 +12,11 @@ fp32_step = []
 int8_step = []
 fp32_return = []
 int8_return = []
-
+def fuse_modules(model):
+    if hasattr(model, 'fuse_modules'):
+        model.fuse_modules()
+    for p in list(model.modules())[1:]:
+        fuse_modules(p)
 for i in range(len(seed)):
     config = Walker2DConfig(seed[i])
     env = gym.make(config.env)
@@ -22,12 +26,12 @@ for i in range(len(seed)):
     avg_return, steps_origin = agent.evaluation()
     origin_end = time.time()
 
-
     agent_int8 = torch.ao.quantization.quantize_dynamic(
         agent,
         {torch.nn.Linear, torch.nn.ReLU},
         dtype=torch.qint8
     )
+    
     quant_start = time.time()
     avg_return_int8, steps_quant = agent_int8.evaluation()
     quant_end = time.time()

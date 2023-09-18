@@ -1,5 +1,5 @@
 gymnasium==0.29.0
-numpy==1.25.2
+numpy<1.25,>=1.21
 scipy==1.11.1
 mujoco==2.3.7
 matplotlib==3.7.2

@@ -18,10 +18,10 @@ def fuse_modules(model):
     for p in list(model.modules())[1:]:
         fuse_modules(p)
 for i in range(len(seed)):
-    config = Walker2DConfig(seed[i])
+    config = AntConfig(seed[i])
     env = gym.make(config.env)
     agent = TRPO(env, config)
-    agent.load_model(f"models/TRPO-{config.env_name}-seed-1.pt")
+    agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")
     origin_start = time.time()
     avg_return, steps_origin = agent.evaluation()
     origin_end = time.time()

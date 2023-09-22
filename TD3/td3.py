@@ -17,10 +17,14 @@ class Actor(nn.Module):
         self.target_noise = self.config.target_noise
         self.noise_clip = self.config.noise_clip
         self.tau = self.config.tau
+        self.device = 'cpu'
 
         self.l1 = nn.Linear(ob_dim, 256)
+        self.ac1 = nn.ReLU()
         self.l2 = nn.Linear(256, 256)
+        self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, act_dim)
+        self.ac3 = nn.Tanh()
 
         self.init_weights()
 
@@ -30,20 +34,20 @@ class Actor(nn.Module):
         nn.init.xavier_normal_(self.l3.weight)
 
     def forward(self, ob):
-        out = F.relu(self.l1(ob))
-        out = F.relu(self.l2(out))
-        out = F.tanh(self.l3(out)) * self.a_high
+        out = self.ac1(self.l1(ob))
+        out = self.ac2(self.l2(out))
+        out = torch.mul(self.ac3(self.l3(out)), self.a_high)
         return out
     
     def explore(self, state):
         state = torch.as_tensor(state, dtype=torch.float, device=self.device)
         action = self(state)
-        noise = torch.normal(mean=0.0, std=self.explore_noise, size=action.size(), device=device)
+        noise = torch.normal(mean=0.0, std=self.explore_noise, size=action.size(), device=self.device)
         out = torch.clip(action + noise, self.a_low, self.a_high)
         return out
 
     def target(self, next_actions):
-        noise = torch.normal(mean=0.0, std=self.target_noise, size=next_actions.size(), device=device)
+        noise = torch.normal(mean=0.0, std=self.target_noise, size=next_actions.size(), device=self.device)
         actions = torch.clip(next_actions + torch.clip(noise, -self.noise_clip, self.noise_clip), self.a_low, self.a_high)
         return actions
     
@@ -55,19 +59,28 @@ class Actor(nn.Module):
         with torch.no_grad():
             for param1, param2 in zip(self.parameters(), original.parameters()):
                 param1.copy_(param2)
+    def fuse_modules(self):
+        torch.ao.quantization.fuse_modules(self, ['l1', 'ac1'], inplace=True)
+        torch.ao.quantization.fuse_modules(self, ['l2', 'ac2'], inplace=True)
 
+    def to(self, device):
+        model = super().to(device)
+        model.device = device
+        return model
 
 class QNet(nn.Module):
     def __init__(self, ob_dim, act_dim, tau):
         super().__init__()
         self.tau = tau
         self.l1 = nn.Linear(ob_dim + act_dim, 256)
+        self.ac1 = nn.ReLU()
         self.l2 = nn.Linear(256, 256)
+        self.ac2 = nn.ReLU()
         self.l3 = nn.Linear(256, 1)
     def forward(self, ob, act):
         inputs = torch.cat((ob, act), 1)
-        out = F.relu(self.l1(inputs))
-        out = F.relu(self.l2(out))
+        out = self.ac1(self.l1(inputs))
+        out = self.ac2(self.l2(out))
         out = self.l3(out)
         return out.squeeze()
     
@@ -79,6 +92,10 @@ class QNet(nn.Module):
         with torch.no_grad():
             for param1, param2 in zip(self.parameters(), original.parameters()):
                 param1.copy_(param2)
+    
+    def fuse_modules(self):
+        torch.ao.quantization.fuse_modules(self, ['l1', 'ac1'], inplace=True)
+        torch.ao.quantization.fuse_modules(self, ['l2', 'ac2'], inplace=True)
 
 class ReplayBuffer:
     def __init__(self, config):
@@ -142,6 +159,13 @@ class TwinDelayedDDPG(nn.Module):
         self.q2_optim = torch.optim.Adam(self.q2.parameters(), lr=self.config.v_lr)
 
         self.num_iter = 0
+    def to(self, device):
+        model = super().to(device)
+        model.device = device
+        #self.critic_optim.state = defaultdict(dict)
+        return model
+    def set(self, device):
+        self.device = device
     
     def compute_targets(self, next_states, rewards, done):
         next_states = torch.as_tensor(next_states, dtype=torch.float, device=self.device)
@@ -244,24 +268,28 @@ class TwinDelayedDDPG(nn.Module):
 
 
     
-    def evaluation(self):
+    def evaluation(self, seed=None):
+        if seed is None:
+            seed = self.config.seed
         env = gym.make(self.config.env)
         ep_reward = 0
-        state, _ = env.reset(seed = self.config.seed + 100)
+        state, _ = env.reset(seed = seed + 100)
+        steps = 0
         for i in range(self.config.eval_epochs):
             state, _ = env.reset()
             done = False
             while not done:
-                action = self.actor(torch.as_tensor(state, dtype=torch.float, device=self.device)).detach().cpu().numpy()
+                action = self.actor(torch.as_tensor(state[None,:], dtype=torch.float, device=self.device)).detach().cpu().numpy().squeeze(axis=0)
                 state, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
                 ep_reward += reward
+                steps += 1
             state, _ = env.reset()
             done = False
         print("---------------------------------------")
         print(f"Evaluation over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
         print("---------------------------------------")
-        return ep_reward/self.config.eval_epochs
+        return ep_reward/self.config.eval_epochs, steps/self.config.eval_epochs
 
 
     

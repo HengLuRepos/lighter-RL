@@ -5,10 +5,7 @@ import matplotlib.pylab as plt
 import torch.distributions as ptd
 import gymnasium as gym
 import scipy
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-def np2torch(np_arr) -> torch.Tensor:
-    np_arr = torch.from_numpy(np_arr) if isinstance(np_arr,np.ndarray) else np_arr
-    return np_arr.to(device).float()
+from collections import defaultdict
 def discount_cumsum(x, discount):
     return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 
@@ -62,12 +59,13 @@ class TRPO(nn.Module):
         self.lam = self.config.lam
         self.seed = self.config.seed
         self.env.reset(seed=self.seed)
+        self.device = 'cpu'
         torch.manual_seed(seed=self.seed)
 
         self.ob_dim = self.env.observation_space.shape[0]
         self.ac_dim = self.env.action_space.shape[0]
-        self.actor = Actor(self.ob_dim, self.ac_dim, self.config.layer_size).to(device)
-        self.critic = Critic(self.ob_dim, self.config.layer_size).to(device)
+        self.actor = Actor(self.ob_dim, self.ac_dim, self.config.layer_size).to(self.device)
+        self.critic = Critic(self.ob_dim, self.config.layer_size).to(self.device)
         self.alpha = self.config.alpha
         self.delta = self.config.delta
         self.damping = self.config.damping
@@ -85,10 +83,17 @@ class TRPO(nn.Module):
         out = self.actor(out)[0]
         out = self.dequant_output(out)
         return out
+    def to(self, device):
+        model = super().to(device)
+        model.device = device
+        #self.critic_optim.state = defaultdict(dict)
+        return model
+    def set(self, device):
+        self.device = device
 
     def calc_advantage(self, ob, next_ob, rewards, done):
-        values = self.critic(np2torch(ob)).detach().cpu().numpy()
-        next_vals = self.critic(np2torch(next_ob)).detach().cpu().numpy()
+        values = self.critic(torch.as_tensor(ob, dtype=torch.float, device=self.device)).detach().cpu().numpy()
+        next_vals = self.critic(torch.as_tensor(next_ob, dtype=torch.float, device=self.device)).detach().cpu().numpy()
         delta = rewards + (1.0 - done) * self.gamma * next_vals - values
         advantages = discount_cumsum(delta, self.lam * self.gamma)
         advantages = (advantages - np.mean(advantages)) / (np.std(advantages) + 1e-8)
@@ -104,7 +109,7 @@ class TRPO(nn.Module):
             episode_reward = 0
             for step in range(self.config.max_ep_len):
                 states.append(state)
-                mu, std = self.actor(np2torch(state))
+                mu, std = self.actor(torch.as_tensor(state, dtype=torch.float, device=self.device))
                 dist = ptd.MultivariateNormal(loc=mu, scale_tril=torch.diag(std))
                 action = dist.sample()
                 log_prob = dist.log_prob(action).detach().cpu().numpy()
@@ -171,8 +176,8 @@ class TRPO(nn.Module):
         return x
     
     def update_critic(self, returns, states):
-        values = self.critic(np2torch(states))
-        loss_critic = torch.nn.functional.mse_loss(values, np2torch(returns))
+        values = self.critic(torch.as_tensor(states, dtype=torch.float, device=self.device))
+        loss_critic = torch.nn.functional.mse_loss(values, torch.as_tensor(returns, dtype=torch.float, device=self.device))
         self.critic_optim.zero_grad()
         loss_critic.backward()
         self.critic_optim.step()
@@ -187,16 +192,16 @@ class TRPO(nn.Module):
     
     def line_search(self, states, actions, next_states, rewards, done, old_logp):
         advantages = self.calc_advantage(states, next_states, rewards, done)
-        advantages = np2torch(advantages)
-        old_logp = np2torch(old_logp)
-        mu, std = self.actor(np2torch(states))
+        advantages = torch.as_tensor(advantages, dtype=torch.float, device=self.device)
+        old_logp = torch.as_tensor(old_logp, dtype=torch.float, device=self.device)
+        mu, std = self.actor(torch.as_tensor(states, dtype=torch.float, device=self.device))
         dist = ptd.MultivariateNormal(loc=mu, scale_tril=torch.diag(std))
-        log_probs = dist.log_prob(np2torch(actions))
+        log_probs = dist.log_prob(torch.as_tensor(actions, dtype=torch.float, device=self.device))
         loss_actor = ((log_probs - old_logp).exp() * advantages).mean()
         grads = self._flat_grad(loss_actor, self.actor, retain_graph=True).detach()
         
         with torch.no_grad():
-            mu, std = self.actor(np2torch(states))
+            mu, std = self.actor(torch.as_tensor(states, dtype=torch.float, device=self.device))
             old_dist = ptd.MultivariateNormal(loc=mu, scale_tril=torch.diag(std))
             flat_params = torch.cat([param.data.view(-1) for param in self.actor.parameters()])
         kl = ptd.kl_divergence(old_dist, dist).mean()
@@ -207,9 +212,9 @@ class TRPO(nn.Module):
         for k in range(self.backtrack_steps):
             new_flat_params = flat_params + stepsize * x
             self._set_params(self.actor, new_flat_params)
-            mu, std = self.actor(np2torch(states))
+            mu, std = self.actor(torch.as_tensor(states, dtype=torch.float, device=self.device))
             dist = ptd.MultivariateNormal(loc=mu, scale_tril=torch.diag(std))
-            log_probs = dist.log_prob(np2torch(actions))
+            log_probs = dist.log_prob(torch.as_tensor(actions, dtype=torch.float, device=self.device))
             new_loss_actor = ((log_probs - old_logp).exp() * advantages).mean()
             kl = ptd.kl_divergence(old_dist, dist).mean()
             if kl < self.delta and new_loss_actor >= loss_actor:
@@ -243,16 +248,18 @@ class TRPO(nn.Module):
                 self.save_model(f"models/trpo-{self.config.env_name}-seed-{self.seed}.pt")
         print(f"{self.config.env_name} Best Avg reward: {best_avg:.2f}")
     
-    def evaluation(self):
+    def evaluation(self, seed = None):
         env = gym.make(self.config.env)
         ep_reward = 0
-        state, _ = env.reset(seed = self.config.seed + 100)
+        if seed is None:
+            seed = self.config.seed
+        state, _ = env.reset(seed = seed + 100)
         steps = 0
         for i in range(self.config.eval_epochs):
             state, _ = env.reset()
             done = False
             while not done:
-              action = self(np2torch(state[None,:])).detach().cpu().numpy().squeeze(axis=0)
+              action = self(torch.as_tensor(state[None,:], dtype=torch.float, device=self.device)).detach().cpu().numpy().squeeze(axis=0)
               state, reward, terminated, truncated, _ = env.step(action)
               ep_reward += reward
               done = terminated or truncated
@@ -266,3 +273,4 @@ class TRPO(nn.Module):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
         self.load_state_dict(torch.load(path))
+

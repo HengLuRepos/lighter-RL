@@ -6,10 +6,6 @@ import gymnasium as gym
 import torch.nn.functional as F
 from collections import deque
 import random
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-def np2torch(np_arr):
-    np_arr = torch.from_numpy(np_arr) if isinstance(np_arr,np.ndarray) else np_arr
-    return np_arr.to(device).float()
 
 class Actor(nn.Module):
     def __init__(self, ob_dim, act_dim, config):
@@ -40,7 +36,7 @@ class Actor(nn.Module):
         return out
     
     def explore(self, state):
-        state = np2torch(state)
+        state = torch.as_tensor(state, dtype=torch.float, device=self.device)
         action = self(state)
         noise = torch.normal(mean=0.0, std=self.explore_noise, size=action.size(), device=device)
         out = torch.clip(action + noise, self.a_low, self.a_high)
@@ -114,6 +110,7 @@ class TwinDelayedDDPG(nn.Module):
         self.env = env
         self.config = config
         self.seed = self.config.seed
+        self.device = 'cpu'
         
         torch.manual_seed(self.seed)
         np.random.seed(seed=self.seed)
@@ -126,16 +123,16 @@ class TwinDelayedDDPG(nn.Module):
         self.ob_dim = self.env.observation_space.shape[0]
         self.act_dim = self.env.action_space.shape[0]
 
-        self.actor = Actor(self.ob_dim, self.act_dim, self.config).to(device)
-        self.actor_target = Actor(self.ob_dim, self.act_dim, self.config).to(device)
+        self.actor = Actor(self.ob_dim, self.act_dim, self.config).to(self.device)
+        self.actor_target = Actor(self.ob_dim, self.act_dim, self.config).to(self.device)
         self.actor_target.copy(self.actor)
 
-        self.q1 = QNet(self.ob_dim, self.act_dim, self.config.tau).to(device)
-        self.q1_targ = QNet(self.ob_dim, self.act_dim, self.config.tau).to(device)
+        self.q1 = QNet(self.ob_dim, self.act_dim, self.config.tau).to(self.device)
+        self.q1_targ = QNet(self.ob_dim, self.act_dim, self.config.tau).to(self.device)
         self.q1_targ.copy(self.q1)
 
-        self.q2 = QNet(self.ob_dim, self.act_dim, self.config.tau).to(device)
-        self.q2_targ = QNet(self.ob_dim, self.act_dim, self.config.tau).to(device)
+        self.q2 = QNet(self.ob_dim, self.act_dim, self.config.tau).to(self.device)
+        self.q2_targ = QNet(self.ob_dim, self.act_dim, self.config.tau).to(self.device)
         self.q2_targ.copy(self.q2)
 
         self.buffer = ReplayBuffer(self.config)
@@ -147,9 +144,9 @@ class TwinDelayedDDPG(nn.Module):
         self.num_iter = 0
     
     def compute_targets(self, next_states, rewards, done):
-        next_states = np2torch(next_states)
-        rewards = np2torch(rewards)
-        done = np2torch(done)
+        next_states = torch.as_tensor(next_states, dtype=torch.float, device=self.device)
+        rewards = torch.as_tensor(rewards, dtype=torch.float, device=self.device)
+        done = torch.as_tensor(done, dtype=torch.float, device=self.device)
         mu = self.actor_target(next_states)
         actions = self.actor.target(mu)
         q_targs = torch.min(self.q1_targ(next_states, actions), self.q2_targ(next_states, actions))
@@ -157,8 +154,8 @@ class TwinDelayedDDPG(nn.Module):
         return targets
     
     def update_q(self, states, actions, next_states, rewards, done):
-        states = np2torch(states)
-        actions = np2torch(actions)
+        states = torch.as_tensor(states, dtype=torch.float, device=self.device)
+        actions = torch.as_tensor(actions, dtype=torch.float, device=self.device)
         targets = self.compute_targets(next_states, rewards, done)
 
         q1 = self.q1(states, actions)
@@ -174,7 +171,7 @@ class TwinDelayedDDPG(nn.Module):
         self.q2_optim.step()
     
     def update_actor(self, states):
-        states = np2torch(states)
+        states = torch.as_tensor(states, dtype=torch.float, device=self.device)
         mu = self.actor(states)
         loss = -torch.mean(self.q1(states, mu))
         self.actor_optim.zero_grad()
@@ -255,7 +252,7 @@ class TwinDelayedDDPG(nn.Module):
             state, _ = env.reset()
             done = False
             while not done:
-                action = self.actor(np2torch(state)).detach().cpu().numpy()
+                action = self.actor(torch.as_tensor(state, dtype=torch.float, device=self.device)).detach().cpu().numpy()
                 state, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
                 ep_reward += reward

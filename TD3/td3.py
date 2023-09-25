@@ -17,7 +17,6 @@ class Actor(nn.Module):
         self.target_noise = self.config.target_noise
         self.noise_clip = self.config.noise_clip
         self.tau = self.config.tau
-        self.device = 'cpu'
 
         self.l1 = nn.Linear(ob_dim, 256)
         self.ac1 = nn.ReLU()
@@ -40,14 +39,13 @@ class Actor(nn.Module):
         return out
     
     def explore(self, state):
-        state = torch.as_tensor(state, dtype=torch.float, device=self.device)
         action = self(state)
-        noise = torch.normal(mean=0.0, std=self.explore_noise, size=action.size(), device=self.device)
+        noise = torch.normal(mean=0.0, std=self.explore_noise, size=action.size(), device=state.device)
         out = torch.clip(action + noise, self.a_low, self.a_high)
         return out
 
     def target(self, next_actions):
-        noise = torch.normal(mean=0.0, std=self.target_noise, size=next_actions.size(), device=self.device)
+        noise = torch.normal(mean=0.0, std=self.target_noise, size=next_actions.size(), device=next_actions.device)
         actions = torch.clip(next_actions + torch.clip(noise, -self.noise_clip, self.noise_clip), self.a_low, self.a_high)
         return actions
     
@@ -62,11 +60,6 @@ class Actor(nn.Module):
     def fuse_modules(self):
         torch.ao.quantization.fuse_modules(self, ['l1', 'ac1'], inplace=True)
         torch.ao.quantization.fuse_modules(self, ['l2', 'ac2'], inplace=True)
-
-    def to(self, device):
-        model = super().to(device)
-        model.device = device
-        return model
 
 class QNet(nn.Module):
     def __init__(self, ob_dim, act_dim, tau):
@@ -158,6 +151,9 @@ class TwinDelayedDDPG(nn.Module):
         self.q1_optim = torch.optim.Adam(self.q1.parameters(), lr=self.config.v_lr)
         self.q2_optim = torch.optim.Adam(self.q2.parameters(), lr=self.config.v_lr)
 
+        self.quant_input = torch.ao.quantization.QuantStub()
+        self.dequant_output = torch.ao.quantization.DeQuantStub()
+
         self.num_iter = 0
     def to(self, device):
         model = super().to(device)
@@ -203,7 +199,9 @@ class TwinDelayedDDPG(nn.Module):
         self.actor_optim.step()
     
     def forward(self, state):
-        out = self.actor(state)
+        out = self.quant_input(state)
+        out = self.actor(out)
+        out = self.dequant_output(out)
         return out
     
     def initial_explore(self):
@@ -230,6 +228,7 @@ class TwinDelayedDDPG(nn.Module):
             if t < self.config.start_steps:
                 action = self.env.action_space.sample()
             else:
+                state = torch.as_tensor(state, dtype=torch.float, device=self.device)
                 action = self.actor.explore(state).detach().cpu().numpy()
             next_state, reward, terminated, truncated, _ = self.env.step(action)
             done = terminated or truncated

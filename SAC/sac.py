@@ -3,228 +3,222 @@ import torch
 import torch.nn as nn
 import torch.distributions as ptd
 import numpy as np
-from utils import device, mlp, np2torch
 from collections import deque
 import random
-class ReGaussianPolicy(nn.Module):
-    def __init__(self, env, config):
+from stable_baselines3.common.buffers import ReplayBuffer
+class MLP(nn.Module):
+    def __init__(self, input_dim, layer_size):
         super().__init__()
-        self.env = env
-        self.config = config
-        self.log_alpha = nn.Parameter(torch.tensor(0.0, device=device), requires_grad=True)
-        self.observation_dim = self.env.observation_space.shape[0]
-        self.action_dim = self.env.action_space.shape[0]
-        self.mu_network = mlp(self.observation_dim,
-                                    self.action_dim,
-                                    self.config.layer_size,
-                                    self.config.n_layers).to(device)
-        self.log_network = mlp(self.observation_dim,
-                                     self.action_dim,
-                                     self.config.layer_size,
-                                     self.config.n_layers).to(device)
-        self.action_scale = torch.FloatTensor((self.env.action_space.high -
-                                               self.env.action_space.low) / 2.)
-        self.action_bias = torch.FloatTensor((self.env.action_space.high +
-                                              self.env.action_space.low) / 2.)
-        self.optimizer = torch.optim.Adam([
-            {'params': self.mu_network.parameters()},
-            {'params': self.log_network.parameters()}
-        ], lr=self.config.pi_lr)
-        self.alpha_opt = torch.optim.Adam([self.log_alpha], lr=self.config.pi_lr)
-        self.alpha = torch.exp(self.log_alpha).to(device)
-    def forward(self, obs, require_logprob=True):
-        mean = self.mu_network(obs).to(device)
-        log_std = self.log_network(obs).to(device)
-        std = torch.exp(log_std).to(device)
-        pi_dist = torch.distributions.Normal(mean,std)
-        pi_act = pi_dist.rsample()
-        logp_pi = None
-        if require_logprob:
-            logp_pi = pi_dist.log_prob(pi_act).sum(axis=-1)
-            logp_pi -= (2*(np.log(2) - pi_act - torch.nn.functional.softplus(-2*pi_act))).sum(axis=1)
-        return pi_act.to(device), logp_pi, torch.tanh(mean)
-    
-    def update_actor(self, q_new, log_probs):
-        loss = torch.mean(self.alpha.detach() * log_probs - q_new)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
+        self.l1 = nn.Linear(input_dim, layer_size)
+        self.ac1 = nn.ReLU()
+        self.l2 = nn.Linear(layer_size, layer_size)
+        self.ac2 = nn.ReLU()
 
-        loss_alpha = torch.mean(self.alpha * self.action_dim - self.alpha * log_probs.detach())
-        self.alpha_opt.zero_grad()
-        loss_alpha.backward()
-        self.alpha_opt.step()
+        self.init_weights()
+    def forward(self, x):
+        out = self.ac1(self.l1(x))
+        out = self.ac2(self.l2(out))
+        return out
+    def init_weights(self):
+        nn.init.xavier_normal_(self.l1.weight)
+        nn.init.xavier_normal_(self.l2.weight)
 
-        self.alpha = torch.exp(self.log_alpha).to(device)
+class Actor(nn.Module):
+    def __init__(self, env:gym.Env, config):
+        super().__init__()
+        self.network = MLP(np.prod(env.observation_space.shape),
+                           config.layer_size)
+        self.mean_out = nn.Linear(config.layer_size, np.prod(env.action_space.shape))
+        self.logstd_out = nn.Linear(config.layer_size, np.prod(env.action_space.shape))
+        self.LOG_STD_MAX = 3
+        self.LOG_STD_MIN = -20
         
+        self.action_scale = nn.Parameter(torch.FloatTensor((env.action_space.high -
+                                               env.action_space.low) / 2.), requires_grad=False)
+        self.action_bias = nn.Parameter(torch.FloatTensor((env.action_space.high +
+                                              env.action_space.low) / 2.), requires_grad=False)
+        
+    def forward(self, x):
+        x = self.network(x)
+        mean = self.mean_out(x)
+        log_std = nn.functional.tanh(self.logstd_out(x))
+        log_std = torch.clamp(log_std, self.LOG_STD_MIN, self.LOG_STD_MAX)
+        return mean, log_std
 
-class SoftQNetwork(nn.Module):
-    def __init__(self, observation_dim, action_dim, config):
-        super().__init__()
-        self.config = config
-        self.network = mlp(observation_dim + action_dim,
-                                 1,
-                                 self.config.layer_size,
-                                 self.config.n_layers).to(device)
-        self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.config.q_lr)
-
-    def update_q_network(self, observations, actions, q_targets):
-        inputs = self(observations, actions)
-        loss = torch.nn.functional.mse_loss(inputs.squeeze(), q_targets.float().detach())
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-    def forward(self, obs, actions):
-        # work for batched version.
-        x = torch.cat((obs, actions), 1)
-        out = self.network(x)
-        out = out.view(out.size(0), -1)
-        return out
+    def act(self, x):
+        mean, logstd = self(x)
+        std = logstd.exp()
+        dist = ptd.Normal(mean, std)
+        action_sampled = dist.rsample()
+        scaled = torch.tanh(action_sampled)
+        action = scaled * self.action_scale + self.action_bias
+        log_probs = dist.log_prob(action_sampled)
+        log_probs -= torch.log(self.action_scale * (1-scaled.pow(2))+1e-6)
+        log_probs = log_probs.sum()
+        mean = torch.tanh(mean) * self.action_scale + self.action_bias
+        return action, log_probs, mean
     
-    def copy(self, q_network):
-        with torch.no_grad():
-            for param1, param2 in zip(self.parameters(), q_network.parameters()):
-                param1.copy_(param2)
-
-class SoftCritic(nn.Module):
-    def __init__(self, observation_dim, config):
+class SoftQNet(nn.Module):
+    def __init__(self, env:gym.Env, config):
         super().__init__()
-        self.config = config
-        self.observation_dim = observation_dim
-        self.network = mlp(self.observation_dim,
-                                 1,
-                                 self.config.layer_size,
-                                 self.config.n_layers).to(device)
-        self.optimizer = torch.optim.Adam(self.network.parameters(), lr=self.config.v_lr)
-        self.tau = self.config.tau
-
-    def update_critic(self, states, q1, q2, log_probs, alpha):
-        log_probs = np2torch(log_probs).unsqueeze(1)
-        q_min = torch.min(q1, q2)
-        inputs = self(states)
-        loss = torch.nn.functional.mse_loss(inputs, q_min - alpha * log_probs)
-        self.optimizer.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-
-    def hard_update(self, critic):
-        # update target network value
-        with torch.no_grad():
-            for param1, param2 in zip(self.parameters(), critic.parameters()):
-                param1.copy_(self.tau * param2 + (1.0 - self.tau) * param1)
-
-    def forward(self, states):
-        out = self.network(states)
-        out = out.view(out.size(0), -1)
-        return out
+        self.network = MLP(np.prod(env.observation_space.shape) + 
+                           np.prod(env.action_space.shape),
+                           config.layer_size)
+        self.q_out = nn.Linear(config.layer_size, 1)
     
-    def copy(self, q_network):
-        with torch.no_grad():
-            for param1, param2 in zip(self.parameters(), q_network.parameters()):
-                param1.copy_(param2)
-
-class ReplayBuffer:
-    def __init__(self, config):
-        self.max_len= config.buffer_size
-        self.batch_size = config.batch_size
-        self.memory = deque(maxlen=self.max_len)
-    def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
-
-    def sample(self):
-        minibatch = random.sample(self.memory, self.batch_size)
-        states, actions, rewards, next_states, dones = [], [], [], [], []
-        for state, action, reward, next_state, done in minibatch:
-            states.append(state)
-            actions.append(action)
-            rewards.append(reward)
-            next_states.append(next_state)
-            dones.append(done)
-        states = np.stack(states)
-        actions = np.stack(actions)
-        rewards = np.stack(rewards)
-        next_states = np.stack(next_states)
-        dones = np.stack(dones)
-        return states, actions, rewards, next_states, dones
+    def forward(self, state, action):
+        x = torch.cat((state, action), 1)
+        x = self.network(x)
+        x = self.q_out(x)
+        return x
 
 class SAC(nn.Module):
-    def __init__(self, env, config, seed):
+    def __init__(self, env:gym.Env, config):
         super().__init__()
         self.env = env
+        self.env.observation_space.dtype = np.float32
         self.config = config
-        self.seed = seed
+        self.seed = self.config.seed
 
-        self.env.reset(seed=self.seed)
-        torch.manual_seed(seed=self.seed)
-        random.seed(seed)
+        random.seed(self.seed)
+        torch.manual_seed(self.seed)
+        np.random.seed(self.seed)
 
-        self.observation_dim = self.env.observation_space.shape[0]
-        self.action_dim = self.env.action_space.shape[0]
-        self.actor = ReGaussianPolicy(self.env, self.config)
-        self.critic = SoftCritic(self.observation_dim, self.config)
-        self.critic_target = SoftCritic(self.observation_dim, self.config)
-        self.critic_target.copy(self.critic)
-        self.q1 = SoftQNetwork(self.observation_dim, self.action_dim, self.config)
-        self.q2 = SoftQNetwork(self.observation_dim, self.action_dim, self.config)
-        self.q2.copy(self.q1)
-        self.buffer = ReplayBuffer(self.config)
-
-
+        self.q_lr = self.config.q_lr
+        self.pi_lr = self.config.pi_lr
+        self.alpha_lr = self.config.alpha_lr
         self.gamma = self.config.gamma
-    def forward(self, state, deterministic=False):
-        action, _, action_d = self.actor(state, require_logprob=False)
-        if deterministic:
-            return action_d
-        return action
+        self.tau = self.config.tau
+
+        self.actor = Actor(self.env, self.config)
+        self.q1 = SoftQNet(self.env, self.config)
+        self.q2 = SoftQNet(self.env, self.config)
+        self.q1_target = SoftQNet(self.env, self.config)
+        self.q1_target.load_state_dict(self.q1.state_dict())
+        self.q2_target = SoftQNet(self.env, self.config)
+        self.q2_target.load_state_dict(self.q2.state_dict())
+        if self.config.alpha_tune:
+            self.log_alpha = nn.Parameter(torch.zeros(1, requires_grad=True))
+        else:
+            self.alpha = nn.Parameter(torch.tensor(self.config.alpha, requires_grad=False))
+
+    def forward(self, state):
+        out = self.actor(state)[0]
+        return out
     
-    def train(self):
-        all_ep_rewards = []
-        for i in range(self.config.num_iter):
-            state, _ = self.env.reset()
-            for step in range(self.config.explore_step):
-                action = self(np2torch(state)).detach().cpu().numpy()
-                next_state, reward, terminated, truncated, _ = self.env.step(action)
-                done = terminated or truncated
-                self.buffer.remember(state, action, reward, next_state, done)
-                state = next_state
-                if done:
-                    state, _ = self.env.reset()
-            
-            for _ in range(self.config.update_gradient_freq):
-                states, actions, rewards, next_states, done = self.buffer.sample()
-                q_targets = rewards + self.gamma * (1.0 - done) * self.critic_target(next_states).detach().squeeze().cpu().numpy()
-                q_targets = np2torch(q_targets)
-                states = np2torch(states)
-                actions = np2torch(actions)
-                actions_sampled, logprobs_sampled, _ = self.actor(states)
-                q1 = self.q1(states, actions_sampled).to(device)
-                q2 = self.q2(states, actions_sampled).to(device)
-                
-                self.q1.update_q_network(states, actions, q_targets)
-                self.q2.update_q_network(states, actions, q_targets)
-                self.critic.update_critic(states, q1, q2, logprobs_sampled, self.actor.alpha.item())
+    def train_agent(self):
+        episide = 0
+        episode_reward = 0
+        best_eval = None
 
-                r_actions, r_log_probs, _ = self.actor(states)
-                q1_new = self.q1(states, r_actions)
-                self.actor.update_actor(q1_new, r_log_probs)
+        device = None
+        q_optimizer = torch.optim.Adam(list(self.q1.parameters()) + list(self.q2.parameters()), lr=self.q_lr)
+        actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.pi_lr)
+        if self.config.alpha_tune:
+            target_entropy = -torch.prod(torch.tensor(self.env.action_space.shape)).item()
+            alpha = self.log_alpha.exp().item()
+            alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=self.alpha_lr)
+            device = self.log_alpha.device
+        else:
+            alpha = self.alpha
+            device = self.alpha.device
+        buffer = ReplayBuffer(
+            self.config.buffer_size,
+            self.env.observation_space,
+            self.env.action_space,
+            device=device,
+            handle_timeout_termination=True,
+        )
+        state,_ = self.env.reset(seed=self.seed)
+        for steps in range(self.config.max_timesteps):
+            if steps < self.config.start_steps:
+                action = self.env.action_space.sample()
+            else:
+                action, _, _ = self.actor.act(torch.as_tensor(state, dtype=torch.float, device=device))
+                action = action.detach().cpu().numpy()
+            next_state, reward, terminated, truncated, info = self.env.step(action)
+            done = terminated or truncated
+            buffer.add(state, next_state, action, reward, done, [info])
+            state = next_state
+            episode_reward += reward
+            if done:
+                print(f"Episode {episide} total rewards: {episode_reward:04.2f}")
+                state, _ = self.env.reset()
+                episide += 1
+                episode_reward = 0
+            if steps >= self.config.start_steps:
+                batch = buffer.sample(self.config.batch_size)
+                with torch.no_grad():
+                    next_actions, next_logp, _ = self.actor.act(batch.next_observations)
+                    q1_target = self.q1_target(batch.next_observations, next_actions)
+                    q2_target = self.q1_target(batch.next_observations, next_actions)
+                    q_target = torch.min(q1_target, q2_target)
+                    qs = batch.rewards.flatten() + (1 - batch.dones.flatten()) * self.gamma * q_target.view(-1)
+                q1 = self.q1(batch.observations, batch.actions).view(-1)
+                q2 = self.q2(batch.observations, batch.actions).view(-1)
+                q_loss = nn.functional.mse_loss(q1, qs) + nn.functional.mse_loss(q2, qs)
+                q_optimizer.zero_grad()
+                q_loss.backward()
+                q_optimizer.step()
 
-                self.critic_target.hard_update(self.critic)
-            
-            state, _ = self.env.reset()
-            episodic_reward = 0
+                if steps % self.config.policy_freq == 0:
+                    for _ in range(self.config.policy_freq):
+                        next_actions, next_logp, _ = self.actor.act(batch.observations)
+                        q1 = self.q1(batch.observations, next_actions)
+                        q2 = self.q2(batch.observations, next_actions)
+                        q = torch.min(q1, q2).view(-1)
+                        actor_loss = ((alpha * next_logp) - q).mean()
+
+                        actor_optimizer.zero_grad()
+                        actor_loss.backward()
+                        actor_optimizer.step()
+
+                        if self.config.alpha_tune:
+                            with torch.no_grad():
+                                _, logp, _ = self.actor.act(batch.observations)
+                            alpha_loss = (-self.log_alpha.exp() * (logp + target_entropy)).mean()
+                            alpha_optimizer.zero_grad()
+                            alpha_loss.backward()
+                            alpha_optimizer.step()
+                            alpha = self.log_alpha.exp().item()
+
+                for param, target_param in zip(self.q1.parameters(), self.q1_target.parameters()):
+                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+                for param, target_param in zip(self.q2.parameters(), self.q2_target.parameters()):
+                    target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
+                self.save_model(f"models/sac-{self.config.env_name}-seed-{self.seed}.pt")
+
+                if steps % self.config.eval_freq == 0:
+                    avg_return, avg_step = self.evaluation()
+                    print(f"Evaluation: avg return: {avg_return:04.2f} avg length: {avg_step:04.2f}")
+                    if best_eval is None or best_eval < avg_return:
+                        best_eval = avg_return
+                        self.save_model(f"models/sac-{self.config.env_name}-seed-{self.seed}-best.pt")
+
+    def save_model(self, path):
+        torch.save(self.state_dict(), path)
+    def load_model(self, path):
+        self.load_state_dict(torch.load(path))
+    def evaluation(self, seed=None):
+        if seed == None:
+            seed = self.seed
+        steps = 0
+        returns = 0
+        env = gym.make(self.config.env)
+        state, _ = env.reset(seed=seed + 100)
+        for i in range(self.config.eval_epochs):
             done = False
             while not done:
-                action = self(np2torch(state), deterministic=True).detach().cpu().numpy()
-                next_state, reward, terminated, truncated, _ = self.env.step(action)
-                episodic_reward = reward + self.gamma * episodic_reward
+                action = self.actor.act(torch.as_tensor(state, dtype=torch.float, device=self.actor.mean_out.weight.device))[2]
+                action = action.detach().cpu().numpy()
+                next_state, reward, terminated, truncated, _ = env.step(action)
+                returns += reward
                 state = next_state
                 done = terminated or truncated
-            all_ep_rewards.append(episodic_reward)
-            msg = "[EPISODE {}]: Episodic reward: {:04.2f}".format(i, episodic_reward)
-            print(msg)
-        print("maximum reward: {:.2f}".format(max(all_ep_rewards)))
+                steps += 1
+            state, _ = env.reset()
+        return returns/self.config.eval_epochs, steps/self.config.eval_epochs
+
+              
 
 
-
-    

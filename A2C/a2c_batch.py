@@ -5,10 +5,6 @@ import matplotlib.pylab as plt
 import torch.distributions as ptd
 import gymnasium as gym
 import scipy
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-def np2torch(np_arr):
-    np_arr = torch.from_numpy(np_arr) if isinstance(np_arr,np.ndarray) else np_arr
-    return np_arr.to(device).float()
 """ def discount_cumsum(x: torch.Tensor, discount):
     sum = 0.0
     result = torch.zeros_like(x)
@@ -63,22 +59,34 @@ class A2C(nn.Module):
         self.lam = self.config.lam
         self.seed = self.config.seed
         self.env.reset(seed=self.seed)
+        self.device = 'cpu'
         torch.manual_seed(seed=self.seed)
 
         self.ob_dim = self.env.observation_space.shape[0]
         self.ac_dim = self.env.action_space.shape[0]
-        self.actor = Actor(self.ob_dim, self.ac_dim, self.config.layer_size).to(device)
-        self.critic = Critic(self.ob_dim, self.config.layer_size).to(device)
+        self.actor = Actor(self.ob_dim, self.ac_dim, self.config.layer_size).to(self.device)
+        self.critic = Critic(self.ob_dim, self.config.layer_size).to(self.device)
 
         self.actor_optim = torch.optim.Adam(self.actor.parameters(), lr=self.config.pi_lr)
         self.critic_optim = torch.optim.Adam(self.critic.parameters(), lr=self.config.v_lr)
+        
+        self.quant_input = torch.ao.quantization.QuantStub()
+        self.dequant_output = torch.ao.quantization.DeQuantStub()
 
     def forward(self, state):
-        return self.actor(state)[0]
+        out = self.quant_input(state)
+        out = self.actor(out)[0]
+        out = self.dequant_output(out)
+        return out
+    
+    def to(self, device):
+        model = super().to(device)
+        model.device = device
+        return model
     
     def calc_advantage(self, ob, next_ob, rewards, done):
-        values = self.critic(np2torch(ob)).detach().cpu().numpy()
-        next_vals = self.critic(np2torch(next_ob)).detach().cpu().numpy()
+        values = self.critic(torch.as_tensor(ob, dtype=torch.float, device=self.device)).detach().cpu().numpy()
+        next_vals = self.critic(torch.as_tensor(next_ob, dtype=torch.float, device=self.device)).detach().cpu().numpy()
         delta = rewards + (1.0 - done) * self.gamma * next_vals - values
         advantages = discount_cumsum(delta, self.lam * self.gamma)
         advantages = (advantages - np.mean(advantages)) / (np.std(advantages) + 1e-8)
@@ -94,7 +102,7 @@ class A2C(nn.Module):
             episode_reward = 0
             for step in range(self.config.max_ep_len):
                 states.append(state)
-                mu, std = self.actor(np2torch(state))
+                mu, std = self.actor(torch.as_tensor(state, dtype=torch.float, device=self.device))
                 dist = ptd.MultivariateNormal(loc=mu, scale_tril=torch.diag(std))
                 action = dist.sample().detach().cpu().numpy()
                 actions.append(action)
@@ -134,17 +142,18 @@ class A2C(nn.Module):
         return np.concatenate(all_returns)
     
     def update_critic(self, returns, states):
-        values = self.critic(np2torch(states))
-        loss_critic = torch.nn.functional.mse_loss(values, np2torch(returns))
+        values = self.critic(torch.as_tensor(states, dtype=torch.float, device=self.device))
+        returns = torch.as_tensor(returns, dtype=torch.float, device=self.device)
+        loss_critic = torch.nn.functional.mse_loss(values, returns)
         self.critic_optim.zero_grad()
         loss_critic.backward()
         self.critic_optim.step()
 
     def update_actor(self, advantages, states, actions):
-        mu, std = self.actor(np2torch(states))
+        mu, std = self.actor(torch.as_tensor(states, dtype=torch.float, device=self.device))
         dist = ptd.MultivariateNormal(loc=mu, scale_tril=torch.diag(std))
-        log_probs = dist.log_prob(np2torch(actions))
-        loss_actor = -torch.sum(log_probs * np2torch(advantages))
+        log_probs = dist.log_prob(torch.as_tensor(actions, dtype=torch.float, device=self.device))
+        loss_actor = -torch.sum(log_probs * torch.as_tensor(advantages, dtype=torch.float, device=self.device))
         self.actor_optim.zero_grad()
         loss_actor.backward()
         self.actor_optim.step()
@@ -157,7 +166,7 @@ class A2C(nn.Module):
             state, _ = env.reset()
             done = False
             while not done:
-              action = self(np2torch(state)).detach().cpu().numpy()
+              action = self(torch.as_tensor(state, dtype=torch.float, device=self.device)).detach().cpu().numpy()
               state, reward, terminated, truncated, _ = env.step(action)
               ep_reward += reward
               done = terminated or truncated
@@ -188,6 +197,7 @@ class A2C(nn.Module):
             print(f"Iter {ep}: Avg reward:{avg_reward:.2f}")
             if (ep + 1) % 5 == 0:
                 self.evaluation(ep + 1)
+                self.save_model(f"models/a2c-{self.config.env_name}-seed-{self.seed}.pt")
         print("Best Avg reward: {:.2f}".format(best_avg))
                 
     def save_model(self, path):

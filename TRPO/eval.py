@@ -15,7 +15,7 @@ int8_step = []
 fp32_return = []
 int8_return = []
 for i in range(len(seed)):
-    config = AntConfig(seed[i])
+    config = HalfCheetahConfig(seed[i])
     env = gym.make(config.env)
     agent = TRPO(env, config).to('cpu')
     agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")

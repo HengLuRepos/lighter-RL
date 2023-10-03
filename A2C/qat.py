@@ -1,7 +1,7 @@
 from config import *
 import torch
 import gymnasium as gym
-from trpo import TRPO
+from a2c_batch import A2C
 import numpy as np
 import time
 from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig, default_qat_qconfig, default_qat_qconfig_v2
@@ -21,10 +21,10 @@ def fuse_modules(model):
     for p in list(model.modules())[1:]:
         fuse_modules(p)
 for i in range(len(seed)):
-    config = HalfCheetahConfig(seed[i])
+    config = InvertedPendulumConfig(seed[i])
     env = gym.make(config.env)
-    agent = TRPO(env, config)
-    agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")
+    agent = A2C(env, config)
+    agent.load_model(f"models/a2c-{config.env_name}-seed-1.pt")
     agent = agent.to('cpu')
     origin_start = time.time()
     agent.eval()
@@ -36,10 +36,10 @@ for i in range(len(seed)):
     agent.qconfig = get_default_qat_qconfig(backend='qnnpack')
     torch.backends.quantized.engine = 'qnnpack'
     torch.ao.quantization.quantize_dtype = torch.qint8
-    fuse_modules(agent)
+    #fuse_modules(agent)
     agent_prepared = torch.ao.quantization.prepare_qat(agent.to('cuda:1').train(), inplace=False)
     agent_prepared.train()
-    for ep in range(10 * config.num_epoch):
+    for ep in range(4 * config.num_epoch):
         paths, episodic_rewards = agent_prepared.sample_batch()
         states = np.concatenate([path["states"] for path in paths])
         actions = np.concatenate([path["actions"] for path in paths])
@@ -58,12 +58,11 @@ for i in range(len(seed)):
     # quant_start = time.time()
     # avg_return_int8, steps_quant = agent_int8.evaluation(seed=seed[i])
     # quant_end = time.time()
-    agent_int8.save_model(f"models/qat/trpo-{config.env_name}-default-{torch.backends.quantized.engine}-fuse.pt")
+    agent_int8.save_model(f"models/a2c/trpo-{config.env_name}-default-{torch.backends.quantized.engine}.pt")
     # fp32_time.append(origin_end - origin_start)
     # int8_time.append(quant_end - quant_start)
     # fp32_return.append(avg_return)
     # int8_return.append(avg_return_int8)
     # fp32_step.append(steps_origin)
     # int8_step.append(steps_quant)
-
 

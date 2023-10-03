@@ -4,12 +4,12 @@ import gymnasium as gym
 from trpo import TRPO
 import numpy as np
 import time
+from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig
+from torch.ao.quantization.fake_quantize import default_fused_act_fake_quant,default_fused_wt_fake_quant
+from torch.ao.quantization.observer import MovingAverageMinMaxObserver, default_per_channel_weight_observer
 seed = [2,3,4,5,6,7,8,9,10,11]
-#fp32_time = []
 int8_time = []
-#fp32_step = []
 int8_step = []
-#fp32_return = []
 int8_return = []
 def fuse_modules(model):
     if hasattr(model, 'fuse_modules'):
@@ -21,39 +21,31 @@ for i in range(len(seed)):
     env = gym.make(config.env)
     agent = TRPO(env, config).to('cpu')
     agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")
-    #origin_start = time.time()
-    #avg_return, steps_origin = agent.evaluation(seed=seed[i])
-    #origin_end = time.time()
 
     agent.eval()
-    agent.qconfig = torch.ao.quantization.get_default_qconfig('x86')
+    agent.qconfig = get_default_qat_qconfig(backend='qnnpack')
     torch.backends.quantized.engine = 'x86'
     torch.ao.quantization.quantize_dtype = torch.qint8
     fuse_modules(agent)
-    agent_prepared = torch.ao.quantization.prepare(agent)
-    env_temp = gym.make(config.env)
-    state, _ = env_temp.reset(seed=seed[i] + 100)
-    for _ in range(1000):
-        agent_prepared(torch.as_tensor(state[None,:], dtype=torch.float, device=agent_prepared.device))
-        state = env_temp.observation_space.sample()
-    agent_int8 = torch.ao.quantization.convert(agent_prepared)
-    
+    agent_prepared = torch.ao.quantization.prepare_qat(agent.train(), inplace=False)
+    agent_prepared.train()
+    agent_int8 = torch.ao.quantization.convert(agent_prepared.eval(), inplace=False)
+    agent_int8.load_model(f"models/qat/trpo-{config.env_name}-default-qnnpack-fuse.pt")
+    agent_int8.eval()
     quant_start = time.time()
-    avg_return_int8, steps_quant = agent_int8.evaluation(seed=seed[i])
+    avg_return_int8, steps_quant = agent_int8.evaluation(seed[i])
     quant_end = time.time()
-    agent_int8.save_model(f"models/static_quantize/trpo-{config.env_name}.pt")
-    #fp32_time.append(origin_end - origin_start)
+    #agent_int8.save_model(f"models/qat/trpo-{config.env_name}.pt")
     int8_time.append(quant_end - quant_start)
-    #fp32_return.append(avg_return)
     int8_return.append(avg_return_int8)
-    #fp32_step.append(steps_origin)
     int8_step.append(steps_quant)
 
 print(f"#### Task: {config.env_name}")
 print()
-print("|                 | int8-ptsq               |")
-print("|--------------------|--------------------|")
+print("|                     | QAT               |")
+print("|---------------------|--------------------|")
 print(f"| avg. return         | {np.mean(int8_return):.2f} +/- {np.std(int8_return):.2f}  |")
 print(f"| avg. inference time | {np.mean(int8_time):.2f} +/- {np.std(int8_time):.2f}      |")
 print(f"| avg. ep length      | {np.mean(int8_step):.2f} +/- {np.std(int8_step):.2f}  |")
+
 

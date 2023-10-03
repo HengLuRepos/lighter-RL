@@ -278,7 +278,7 @@ class TwinDelayedDDPG(nn.Module):
             state, _ = env.reset()
             done = False
             while not done:
-                action = self.actor(torch.as_tensor(state[None,:], dtype=torch.float, device=self.device)).detach().cpu().numpy().squeeze(axis=0)
+                action = self(torch.as_tensor(state[None,:], dtype=torch.float, device=self.device)).detach().cpu().numpy().squeeze(axis=0)
                 state, reward, terminated, truncated, _ = env.step(action)
                 done = terminated or truncated
                 ep_reward += reward

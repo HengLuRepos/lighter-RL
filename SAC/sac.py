@@ -6,6 +6,7 @@ import numpy as np
 from collections import deque
 import random
 from stable_baselines3.common.buffers import ReplayBuffer
+#part from cleanRL
 class MLP(nn.Module):
     def __init__(self, input_dim, layer_size):
         super().__init__()
@@ -45,7 +46,7 @@ class Actor(nn.Module):
         mean = self.mean_out(x)
         log_std = nn.functional.tanh(self.logstd_out(x))
         #log_std = torch.clamp(log_std, self.LOG_STD_MIN, self.LOG_STD_MAX)
-        log_std = self.LOG_STD_MIN + 0.5 * (self.LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
+        log_std = self.LOG_STD_MIN + 0.5 * (self.LOG_STD_MAX - self.LOG_STD_MIN) * (log_std + 1)
         return mean, log_std
 
     def act(self, x):
@@ -57,7 +58,7 @@ class Actor(nn.Module):
         action = scaled * self.action_scale + self.action_bias
         log_probs = dist.log_prob(action_sampled)
         log_probs -= torch.log(self.action_scale * (1-scaled.pow(2))+1e-6)
-        log_probs = log_probs.sum()
+        log_probs = log_probs.sum(1, keepdim=True)
         mean = torch.tanh(mean) * self.action_scale + self.action_bias
         return action, log_probs, mean
     
@@ -79,7 +80,6 @@ class SAC(nn.Module):
     def __init__(self, env:gym.Env, config):
         super().__init__()
         self.env = env
-        self.env.observation_space.dtype = np.float32
         self.config = config
         self.seed = self.config.seed
 
@@ -113,40 +113,54 @@ class SAC(nn.Module):
         episide = 0
         episode_reward = 0
         best_eval = None
-
+        envs = gym.vector.make(self.config.env, num_envs=1, asynchronous=False)
         device = None
         q_optimizer = torch.optim.Adam(list(self.q1.parameters()) + list(self.q2.parameters()), lr=self.q_lr)
         actor_optimizer = torch.optim.Adam(self.actor.parameters(), lr=self.pi_lr)
         if self.config.alpha_tune:
-            target_entropy = -torch.prod(torch.tensor(self.env.action_space.shape)).item()
+            target_entropy = -torch.prod(torch.tensor(envs.single_action_space.shape)).item()
             alpha = self.log_alpha.exp().item()
             alpha_optimizer = torch.optim.Adam([self.log_alpha], lr=self.alpha_lr)
             device = self.log_alpha.device
         else:
             alpha = self.alpha
             device = self.alpha.device
+        
+        envs.single_observation_space.dtype = np.float32
         buffer = ReplayBuffer(
             self.config.buffer_size,
-            self.env.observation_space,
-            self.env.action_space,
+            envs.single_observation_space,
+            envs.single_action_space,
             device=device,
             handle_timeout_termination=True,
         )
-        state,_ = self.env.reset(seed=self.seed)
+        state, info = envs.reset(seed = self.seed)
         for steps in range(self.config.max_timesteps):
             if steps < self.config.start_steps:
-                action = self.env.action_space.sample()
+                action = np.array([envs.single_action_space.sample() for _ in range(envs.num_envs)])
             else:
                 action, _, _ = self.actor.act(torch.as_tensor(state, dtype=torch.float, device=device))
                 action = action.detach().cpu().numpy()
-            next_state, reward, terminated, truncated, info = self.env.step(action)
+            next_state, reward, terminated, truncated, infos = envs.step(action)
             done = terminated or truncated
-            buffer.add(state, next_state.copy(), action, reward, done, [info])
+            infos = [infos]
+            for info in infos:
+                if "episode" in info.keys():
+                    print(f"global_step={steps}, episodic_return={info['episode']['r']}")
+                    writer.add_scalar("charts/episodic_return", info["episode"]["r"], steps)
+                    writer.add_scalar("charts/episodic_length", info["episode"]["l"], steps)
+                    break
+
+            real_next_obs = next_state.copy()
+            for idx, d in enumerate(done):
+                if d:
+                    real_next_obs[idx] = infos[idx]["final_observation"][0]
+
+            buffer.add(state, real_next_obs, action, reward, done, infos)
             state = next_state
-            episode_reward += reward
-            if done:
-                print(f"Episode {episide} total rewards: {episode_reward:04.2f}")
-                state, _ = self.env.reset()
+            episode_reward += reward.sum()/envs.num_envs
+            if any(done):
+                print(f"{self.config.env_name} Episode {episide} total rewards: {episode_reward:04.2f}")
                 episide += 1
                 episode_reward = 0
             if steps >= self.config.start_steps:
@@ -155,8 +169,8 @@ class SAC(nn.Module):
                     next_actions, next_logp, _ = self.actor.act(batch.next_observations)
                     q1_target = self.q1_target(batch.next_observations, next_actions)
                     q2_target = self.q1_target(batch.next_observations, next_actions)
-                    q_target = torch.min(q1_target, q2_target)
-                    qs = batch.rewards.flatten() + (1 - batch.dones.flatten()) * self.gamma * q_target.view(-1)
+                    q_target = torch.min(q1_target, q2_target) - alpha * next_logp
+                    qs = batch.rewards.flatten() + (1 - batch.dones.flatten()) * self.gamma * (q_target).view(-1)
                 q1 = self.q1(batch.observations, batch.actions).view(-1)
                 q2 = self.q2(batch.observations, batch.actions).view(-1)
                 q_loss = nn.functional.mse_loss(q1, qs) + nn.functional.mse_loss(q2, qs)
@@ -191,12 +205,14 @@ class SAC(nn.Module):
                     target_param.data.copy_(self.tau * param.data + (1 - self.tau) * target_param.data)
                 self.save_model(f"models/sac-{self.config.env_name}-seed-{self.seed}.pt")
 
-                if steps % self.config.eval_freq == 0:
+
+                """ if steps % self.config.eval_freq == 0:
                     avg_return, avg_step = self.evaluation()
-                    print(f"Evaluation: avg return: {avg_return:04.2f} avg length: {avg_step:04.2f}")
+                    print(f"{self.config.env_name} Evaluation: avg return: {avg_return:04.2f} avg length: {avg_step:04.2f}")
                     if best_eval is None or best_eval < avg_return:
                         best_eval = avg_return
-                        self.save_model(f"models/sac-{self.config.env_name}-seed-{self.seed}-best.pt")
+                        self.save_model(f"models/sac-{self.config.env_name}-seed-{self.seed}-best.pt") """
+            envs.close()
 
     def save_model(self, path):
         torch.save(self.state_dict(), path)
@@ -223,5 +239,3 @@ class SAC(nn.Module):
         return returns/self.config.eval_epochs, steps/self.config.eval_epochs
 
               
-
-

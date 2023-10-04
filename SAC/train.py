@@ -4,5 +4,5 @@ from config import *
 import torch
 config = HumanoidStandupConfig(1)
 env = gym.make(config.env)
-agent = SAC(env, config).to('cuda:1')
+agent = SAC(env, config).to('cuda:0')
 agent.train_agent()

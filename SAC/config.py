@@ -1,9 +1,8 @@
 class Config:
     def __init__(self):
         self.layer_size = 256
-        self.buffer_size = 100000
+        self.buffer_size = 1000000
         self.batch_size = 256
-        self.num_iter = 500
         self.tau = 0.005
         self.pi_lr = 3e-4
         self.q_lr = 1e-3
@@ -23,8 +22,6 @@ class InvertedPendulumConfig(Config):
         super().__init__()
 
 
-        self.num_iter = 1000
-        self.start_steps = 1000
         self.env = "InvertedPendulum-v4"
         self.seed = seed
         self.env_name = "InvertedPendulum"
@@ -33,22 +30,84 @@ class HalfCheetahConfig(Config):
     def __init__(self, seed):
         super().__init__()
 
-        self.a_low = -1.0
-        self.a_high = 1.0
+
         self.env = "HalfCheetah-v4"
         self.seed = seed
         self.env_name = "HalfCheetah"
 
-        self.start_steps = 5000
-        self.update_gradient_freq = 20
 
 class AntConfig(Config):
     def __init__(self, seed):
         super().__init__()
-        self.a_low = -1.0
-        self.a_high = 1.0
+
         self.env = "Ant-v4"
         self.seed = seed
         self.env_name = "Ant"
-        self.gamma = 0.99
-        self.update_gradient_freq = 10
+
+class HopperConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.env = "Hopper-v4"
+        self.seed = seed
+        self.env_name = "Hopper"
+
+
+class HumanoidConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+        self.env = "Humanoid-v4"
+        self.seed = seed
+        self.env_name = "Humanoid"
+
+
+class HumanoidStandupConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+
+        self.env = "HumanoidStandup-v4"
+        self.seed = seed
+        self.env_name = "HumanoidStandup"
+
+
+class InvertedDoublePendulumConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+
+        self.env = "InvertedDoublePendulum-v4"
+        self.seed = seed
+        self.env_name = "InvertedDoublePendulum"
+
+
+class PusherConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+
+        self.env = "Pusher-v4"
+        self.seed = seed
+        self.env_name = "Pusher"
+
+class ReacherConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+
+        self.env = "Reacher-v4"
+        self.seed = seed
+        self.env_name = "Reacher"
+
+
+class SwimmerConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+
+        self.env = "Swimmer-v4"
+        self.seed = seed
+        self.env_name = "Swimmer"
+
+
+class Walker2DConfig(Config):
+    def __init__(self, seed):
+        super().__init__()
+
+        self.env = "Walker2d-v4"
+        self.seed = seed
+        self.env_name = "Walker2d"

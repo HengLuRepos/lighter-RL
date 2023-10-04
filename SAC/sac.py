@@ -30,19 +30,22 @@ class Actor(nn.Module):
                            config.layer_size)
         self.mean_out = nn.Linear(config.layer_size, np.prod(env.action_space.shape))
         self.logstd_out = nn.Linear(config.layer_size, np.prod(env.action_space.shape))
-        self.LOG_STD_MAX = 3
-        self.LOG_STD_MIN = -20
+        self.LOG_STD_MAX = 2
+        self.LOG_STD_MIN = -5
         
         self.action_scale = nn.Parameter(torch.FloatTensor((env.action_space.high -
-                                               env.action_space.low) / 2.), requires_grad=False)
+                                               env.action_space.low) / 2.), 
+                                               requires_grad=False)
         self.action_bias = nn.Parameter(torch.FloatTensor((env.action_space.high +
-                                              env.action_space.low) / 2.), requires_grad=False)
+                                              env.action_space.low) / 2.), 
+                                              requires_grad=False)
         
     def forward(self, x):
         x = self.network(x)
         mean = self.mean_out(x)
         log_std = nn.functional.tanh(self.logstd_out(x))
-        log_std = torch.clamp(log_std, self.LOG_STD_MIN, self.LOG_STD_MAX)
+        #log_std = torch.clamp(log_std, self.LOG_STD_MIN, self.LOG_STD_MAX)
+        log_std = self.LOG_STD_MIN + 0.5 * (self.LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)
         return mean, log_std
 
     def act(self, x):
@@ -138,7 +141,7 @@ class SAC(nn.Module):
                 action = action.detach().cpu().numpy()
             next_state, reward, terminated, truncated, info = self.env.step(action)
             done = terminated or truncated
-            buffer.add(state, next_state, action, reward, done, [info])
+            buffer.add(state, next_state.copy(), action, reward, done, [info])
             state = next_state
             episode_reward += reward
             if done:

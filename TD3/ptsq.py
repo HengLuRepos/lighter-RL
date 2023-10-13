@@ -1,7 +1,7 @@
 from config import *
 import torch
 import gymnasium as gym
-from td3 import TwinDelayedDDPG
+from td3_quantize import TwinDelayedDDPG
 import numpy as np
 import time
 seed = [2,3,4,5,6,7,8,9,10,11]
@@ -13,7 +13,7 @@ def fuse_modules(model):
         model.fuse_modules()
     for p in list(model.modules())[1:]:
         fuse_modules(p)
-config = HalfCheetahConfig(seed[0])
+config = HumanoidStandupConfig(seed[0])
 env = gym.make(config.env)
 agent = TwinDelayedDDPG(env, config).to('cpu')
 agent.load_model(f"models/TD3-{config.env_name}-seed-1.pt")
@@ -24,7 +24,7 @@ torch.ao.quantization.quantize_dtype = torch.qint8
 fuse_modules(agent)
 agent_prepared = torch.ao.quantization.prepare(agent)
 env_temp = gym.make(config.env)
-state, _ = env_temp.reset(seed=seed[i] + 100)
+state, _ = env_temp.reset(seed=seed[0] + 100)
 for _ in range(1000):
     agent_prepared(torch.as_tensor(state[None,:], dtype=torch.float, device=agent_prepared.device))
     state = env_temp.observation_space.sample()

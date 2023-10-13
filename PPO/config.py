@@ -1,17 +1,18 @@
 class Config:
     def __init__(self):
-        self.v_lr = 5e-3
-        self.pi_lr = 5e-3
+        self.v_lr = 1e-4
+        self.pi_lr = 3e-4
 
         self.gamma = 0.9
         self.lam = 0.97
-        self.batch_size = 1000
+        self.batch_size = 2048
         self.epoch = 1000
         self.max_ep_len = 200
         self.clip=0.2
         self.layer_size = 256
 
-        self.update_freq = 5
+        self.update_freq = 10
+        self.total_timesteps = 1000000
         
 class InvertedPendulumConfig(Config):
     def __init__(self, seed):

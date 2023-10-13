@@ -9,7 +9,7 @@ seed = [2,3,4,5,6,7,8,9,10,11]
 fp32_time = []
 fp32_step = []
 fp32_return = []
-config = HalfCheetahConfig(seed[0])
+config = HumanoidStandupConfig(seed[0])
 env = gym.make(config.env)
 agent = TwinDelayedDDPG(env, config).to('cpu')
 agent.load_model(f"models/TD3-{config.env_name}-seed-1.pt")

@@ -1,7 +1,7 @@
 from config import *
 import torch
 import gymnasium as gym
-from td3 import TwinDelayedDDPG
+from td3_quantize import TwinDelayedDDPG
 import numpy as np
 import time
 from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig, default_qat_qconfig, default_qat_qconfig_v2
@@ -36,7 +36,7 @@ for i in range(len(seed)):
     agent.qconfig = get_default_qat_qconfig(backend='qnnpack')
     torch.backends.quantized.engine = 'qnnpack'
     torch.ao.quantization.quantize_dtype = torch.qint8
-    fuse_modules(agent)
+    #fuse_modules(agent)
     agent_prepared = torch.ao.quantization.prepare_qat(agent.to('cuda:1').train(), inplace=False)
     agent_prepared.train()
     episode_reward = 0
@@ -59,7 +59,7 @@ for i in range(len(seed)):
         if step >= config.start_steps:
             agent_prepared.train_iter()
         if done:
-            print(f"Total T: {step+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
+            print(f"TD3-{config.env_name}-{torch.backends.quantized.engine} Total T: {step+1} Episode Num: {episode_num+1} Episode T: {episode_timesteps} Reward: {episode_reward:.3f}")
             state, _ = agent_prepared.env.reset()
             done = False
             episode_reward = 0
@@ -71,19 +71,11 @@ for i in range(len(seed)):
     # quant_start = time.time()
     # avg_return_int8, steps_quant = agent_int8.evaluation(seed=seed[i])
     # quant_end = time.time()
-    agent_int8.save_model(f"models/qat/TD3-{config.env_name}-default-{torch.backends.quantized.engine}-fuse.pt")
+    agent_int8.save_model(f"models/qat/TD3-{config.env_name}-default-{torch.backends.quantized.engine}.pt")
     # fp32_time.append(origin_end - origin_start)
     # int8_time.append(quant_end - quant_start)
     # fp32_return.append(avg_return)
     # int8_return.append(avg_return_int8)
     # fp32_step.append(steps_origin)
     # int8_step.append(steps_quant)
-
-print(f"#### Task: {config.env_name}")
-print()
-print("|                     | fp32               | int8               |")
-print("|---------------------|--------------------|--------------------|")
-print(f"| avg. return         | {np.mean(fp32_return):.2f} +/- {np.std(fp32_return):.2f}  | {np.mean(int8_return):.2f} +/- {np.std(int8_return):.2f}  |")
-print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     | {np.mean(int8_time):.2f} +/- {np.std(int8_time):.2f}      |")
-print(f"| avg. ep length      | {np.mean(fp32_step):.2f} +/- {np.std(fp32_step):.2f}   | {np.mean(int8_step):.2f} +/- {np.std(int8_step):.2f}  |")
 

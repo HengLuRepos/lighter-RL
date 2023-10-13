@@ -21,14 +21,14 @@ def fuse_modules(model):
     for p in list(model.modules())[1:]:
         fuse_modules(p)
 for i in range(len(seed)):
-    config = InvertedPendulumConfig(seed[i])
+    config = HalfCheetahConfig(seed[i])
     env = gym.make(config.env)
     agent = A2C(env, config)
     agent.load_model(f"models/a2c-{config.env_name}-seed-1.pt")
     agent = agent.to('cpu')
     origin_start = time.time()
     agent.eval()
-    avg_return, steps_origin = agent.evaluation(seed=seed[i])
+    #avg_return, steps_origin = agent.evaluation(seed=seed[i])
     #avg_return, steps_origin = agent.evaluation()
     origin_end = time.time()
 
@@ -39,18 +39,17 @@ for i in range(len(seed)):
     #fuse_modules(agent)
     agent_prepared = torch.ao.quantization.prepare_qat(agent.to('cuda:1').train(), inplace=False)
     agent_prepared.train()
-    for ep in range(4 * config.num_epoch):
+    for ep in range(config.num_epoch):
         paths, episodic_rewards = agent_prepared.sample_batch()
         states = np.concatenate([path["states"] for path in paths])
         actions = np.concatenate([path["actions"] for path in paths])
         rewards = np.concatenate([path["rewards"] for path in paths])
         next_states = np.concatenate([path["next_states"] for path in paths])
         done = np.concatenate([path["done"] for path in paths])
-        old_logp = np.concatenate([path["log_prob"] for path in paths])
         returns = agent_prepared.get_returns(paths)
-
-        agent_prepared.line_search(states, actions, next_states, rewards, done, old_logp)
         agent_prepared.update_critic(returns, states)
+        advantages = agent_prepared.calc_advantage(states, next_states, rewards, done)
+        agent_prepared.update_actor(advantages, states, actions)
         avg_reward = np.mean(episodic_rewards)
         print(f"Iter {ep} Avg reward {avg_reward:.3f}")
     agent_int8 = torch.ao.quantization.convert(agent_prepared.eval().to('cpu'), inplace=False)
@@ -58,7 +57,7 @@ for i in range(len(seed)):
     # quant_start = time.time()
     # avg_return_int8, steps_quant = agent_int8.evaluation(seed=seed[i])
     # quant_end = time.time()
-    agent_int8.save_model(f"models/a2c/trpo-{config.env_name}-default-{torch.backends.quantized.engine}.pt")
+    agent_int8.save_model(f"models/qat/a2c-{config.env_name}-default-{torch.backends.quantized.engine}.pt")
     # fp32_time.append(origin_end - origin_start)
     # int8_time.append(quant_end - quant_start)
     # fp32_return.append(avg_return)

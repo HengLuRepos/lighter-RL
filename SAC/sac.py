@@ -223,19 +223,20 @@ class SAC(nn.Module):
             seed = self.seed
         steps = 0
         returns = 0
-        env = gym.make(self.config.env)
-        state, _ = env.reset(seed=seed + 100)
+        envs = gym.vector.make(self.config.env, num_envs=1, asynchronous=False)
+        envs.single_observation_space.dtype = np.float32
+        state, _ = envs.reset(seed=seed + 100)
         for i in range(self.config.eval_epochs):
             done = False
             while not done:
                 action = self.actor.act(torch.as_tensor(state, dtype=torch.float, device=self.actor.mean_out.weight.device))[2]
                 action = action.detach().cpu().numpy()
-                next_state, reward, terminated, truncated, _ = env.step(action)
-                returns += reward
+                next_state, reward, terminated, truncated, _ = envs.step(action)
+                returns += reward.sum()
                 state = next_state
-                done = terminated or truncated
+                done = any(terminated or truncated)
                 steps += 1
-            state, _ = env.reset()
+        
         return returns/self.config.eval_epochs, steps/self.config.eval_epochs
 
               

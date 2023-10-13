@@ -135,8 +135,6 @@ class DDPG(nn.Module):
         self.actor_optim = torch.optim.Adam(self.actor.parameters(), lr=self.config.pi_lr)
         self.q_optim = torch.optim.Adam(self.q.parameters(), lr=self.config.v_lr)
 
-        self.quant_input = torch.ao.quantization.QuantStub()
-        self.dequant_output = torch.ao.quantization.DeQuantStub()
 
         self.num_iter = 0
     def to(self, device):
@@ -173,9 +171,7 @@ class DDPG(nn.Module):
         self.actor_optim.step()
     
     def forward(self, state):
-        out = self.quant_input(state)
         out = self.actor(out)
-        out = self.dequant_output(out)
         return out
     
     def train_agent(self):

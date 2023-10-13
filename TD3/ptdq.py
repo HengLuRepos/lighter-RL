@@ -1,4 +1,4 @@
-from td3 import TwinDelayedDDPG
+from td3_quantize import TwinDelayedDDPG
 from config import *
 import gymnasium as gym
 import torch
@@ -9,7 +9,7 @@ int8_time = []
 int8_step = []
 int8_return = []
 
-config = AntConfig(seed[0])
+config = HumanoidStandupConfig(seed[0])
 env = gym.make(config.env)
 td3 = TwinDelayedDDPG(env, config).to('cpu')
 td3.load_model(f"models/TD3-{config.env_name}-seed-1.pt")

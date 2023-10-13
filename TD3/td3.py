@@ -57,9 +57,7 @@ class Actor(nn.Module):
         with torch.no_grad():
             for param1, param2 in zip(self.parameters(), original.parameters()):
                 param1.copy_(param2)
-    def fuse_modules(self):
-        torch.ao.quantization.fuse_modules(self, ['l1', 'ac1'], inplace=True)
-        torch.ao.quantization.fuse_modules(self, ['l2', 'ac2'], inplace=True)
+
 
 class QNet(nn.Module):
     def __init__(self, ob_dim, act_dim, tau):
@@ -86,9 +84,6 @@ class QNet(nn.Module):
             for param1, param2 in zip(self.parameters(), original.parameters()):
                 param1.copy_(param2)
     
-    def fuse_modules(self):
-        torch.ao.quantization.fuse_modules(self, ['l1', 'ac1'], inplace=True)
-        torch.ao.quantization.fuse_modules(self, ['l2', 'ac2'], inplace=True)
 
 class ReplayBuffer:
     def __init__(self, config):
@@ -151,14 +146,11 @@ class TwinDelayedDDPG(nn.Module):
         self.q1_optim = torch.optim.Adam(self.q1.parameters(), lr=self.config.v_lr)
         self.q2_optim = torch.optim.Adam(self.q2.parameters(), lr=self.config.v_lr)
 
-        self.quant_input = torch.ao.quantization.QuantStub()
-        self.dequant_output = torch.ao.quantization.DeQuantStub()
 
         self.num_iter = 0
     def to(self, device):
         model = super().to(device)
         model.device = device
-        #self.critic_optim.state = defaultdict(dict)
         return model
     def set(self, device):
         self.device = device
@@ -199,9 +191,7 @@ class TwinDelayedDDPG(nn.Module):
         self.actor_optim.step()
     
     def forward(self, state):
-        out = self.quant_input(state)
-        out = self.actor(out)
-        out = self.dequant_output(out)
+        out = self.actor(state)
         return out
     
     def initial_explore(self):

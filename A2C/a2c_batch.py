@@ -158,10 +158,12 @@ class A2C(nn.Module):
         loss_actor.backward()
         self.actor_optim.step()
 
-    def evaluation(self, t):
+    def evaluation(self, seed = None):
         env = gym.make(self.config.env)
         ep_reward = 0
-        state, _ = env.reset(seed = self.config.seed + 100)
+        if seed is None:
+            seed = self.config.seed
+        state, _ = env.reset(seed = seed + 100)
         for i in range(self.config.eval_epochs):
             state, _ = env.reset()
             done = False
@@ -171,7 +173,7 @@ class A2C(nn.Module):
               ep_reward += reward
               done = terminated or truncated
         print("---------------------------------------")
-        print(f"Evaluation at epoch {t} over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
+        print(f"Evaluation over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
         print("---------------------------------------")
 
     
@@ -196,7 +198,7 @@ class A2C(nn.Module):
                 self.save_model(f"models/a2c-{self.config.env_name}-seed-{self.seed}-best.pt")
             print(f"Iter {ep}: Avg reward:{avg_reward:.2f}")
             if (ep + 1) % 5 == 0:
-                self.evaluation(ep + 1)
+                self.evaluation()
                 self.save_model(f"models/a2c-{self.config.env_name}-seed-{self.seed}.pt")
         print("Best Avg reward: {:.2f}".format(best_avg))
                 

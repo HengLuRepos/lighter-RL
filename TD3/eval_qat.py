@@ -1,7 +1,7 @@
 from config import *
 import torch
 import gymnasium as gym
-from td3 import TwinDelayedDDPG
+from td3_quantize import TwinDelayedDDPG
 import numpy as np
 import time
 from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig
@@ -11,7 +11,7 @@ seed = [2,3,4,5,6,7,8,9,10,11]
 int8_time = []
 int8_step = []
 int8_return = []
-config = HalfCheetahConfig(seed[0])
+config = HumanoidStandupConfig(seed[0])
 env = gym.make(config.env)
 agent = TwinDelayedDDPG(env, config).to('cpu')
 agent.load_model(f"models/TD3-{config.env_name}-seed-1.pt")

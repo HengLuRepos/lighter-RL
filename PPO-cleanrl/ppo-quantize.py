@@ -185,8 +185,8 @@ if __name__ == "__main__":
 
     agent = Agent(envs).to(device)
     agent.load_model(f"models/ppo-{args.env_id}-seed-{args.seed}.pt")
-    agent.qconfig = taq.qconfig.get_default_qat_qconfig(backend='qnnpack')
-    torch.backends.quantized.engine = 'qnnpack'
+    agent.qconfig = taq.qconfig.get_default_qat_qconfig(backend='x86')
+    torch.backends.quantized.engine = 'x86'
     taq.quantize_dtype = torch.qint8
     agent_prepared = torch.ao.quantization.prepare_qat(agent.to(device).train(), inplace=False)
     agent_prepared.train()
@@ -344,4 +344,4 @@ if __name__ == "__main__":
     writer.close()
     agent_int8 = taq.convert(agent_prepared.eval().to('cpu'), inplace=False)
     agent_int8.eval()
-    agent.save_model(f"models/qat/ppo-{args.env_id}-seed-{args.seed}.pt")
+    agent_int8.save_model(f"models/qat/ppo-{args.env_id}-seed-{args.seed}-x86.pt")

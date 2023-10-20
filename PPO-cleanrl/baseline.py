@@ -86,8 +86,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         env = gym.wrappers.ClipAction(env)
         env = gym.wrappers.NormalizeObservation(env)
         env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
-        env = gym.wrappers.NormalizeReward(env, gamma=gamma)
-        env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
+        
         return env
 
     return thunk
@@ -181,8 +180,8 @@ if __name__ == "__main__":
           returns += reward
       end_time = time.time()
       fp32_time.append(end_time- start_time)
-      fp32_return.append(returns)
-      fp32_step.append(steps)
+      fp32_return.append(returns/args.update_epochs)
+      fp32_step.append(steps/args.update_epochs)
     print(f"#### Task: {args.env_id}")
     print()
     print("|                     | fp32               |")

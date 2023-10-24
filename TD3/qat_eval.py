@@ -7,9 +7,12 @@ import time
 from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig
 from torch.ao.quantization.fake_quantize import default_fused_act_fake_quant,default_fused_wt_fake_quant
 from torch.ao.quantization.observer import MovingAverageMinMaxObserver, default_per_channel_weight_observer
-import pyRAPL
-pyRAPL.setup()
-meter = pyRAPL.Measurement('bar')
+from pyJoules.energy_meter import measure_energy
+from pyJoules.handler.csv_handler import CSVHandler
+csv_handler = CSVHandler(f'qat-result.csv')
+@measure_energy(handler=csv_handler)
+def eval(agent, seed):
+    return agent.evaluation(seed)
 
 seed = [2,3,4,5,6,7,8,9,10,11]
 int8_time = []
@@ -30,15 +33,14 @@ agent_prepared.train()
 agent_int8 = torch.ao.quantization.convert(agent_prepared.eval(), inplace=False)
 agent_int8.load_model(f"models/qat/TD3-{config.env_name}-default-x86.pt")
 agent_int8.eval()
-meter.begin()
 for i in range(len(seed)):
     quant_start = time.time()
-    avg_return_int8, steps_quant = agent_int8.evaluation(seed[i])
+    avg_return_int8, steps_quant = eval(agent_int8, seed[i])
     quant_end = time.time()
     int8_time.append(quant_end - quant_start)
     int8_return.append(avg_return_int8)
     int8_step.append(steps_quant)
-meter.end() 
+csv_handler.save_data()
 print(f"#### Task: {config.env_name}")
 print()
 print("|                     | QAT               |")
@@ -46,5 +48,4 @@ print("|---------------------|--------------------|")
 print(f"| avg. return         | {np.mean(int8_return):.2f} +/- {np.std(int8_return):.2f}  |")
 print(f"| avg. inference time | {np.mean(int8_time):.2f} +/- {np.std(int8_time):.2f}      |")
 print(f"| avg. ep length      | {np.mean(int8_step):.2f} +/- {np.std(int8_step):.2f}  |")
-print(meter.result.pkg)
 

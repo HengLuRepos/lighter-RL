@@ -149,8 +149,30 @@ class Actor(nn.Module):
 
 
 if __name__ == "__main__":
+
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
+
+    from pyJoules.energy_meter import measure_energy
+    from pyJoules.handler.csv_handler import CSVHandler
+    csv_handler = CSVHandler(f'{args.env_id}-result.csv')
+    @measure_energy(handler=csv_handler)
+    def eval(agent, seed, envs):
+        steps = 0
+        returns = 0
+        start_time = time.time()
+        states, _ = envs.reset(seed=seed + 100)
+        for i in range(10):
+            done = False
+            while not done:
+                action, log_std = agent(torch.as_tensor(states, dtype=torch.float32))
+                states, reward, ter, trun, _ = envs.step(action.detach().numpy())
+                steps += 1
+                done = any(ter or trun)
+                returns += reward
+        end_time = time.time()
+        return end_time- start_time, returns, steps
+
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -172,20 +194,8 @@ if __name__ == "__main__":
     agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:
-      steps = 0
-      returns = 0
-      start_time = time.time()
-      states, _ = envs.reset(seed=seed + 100)
-      for i in range(10):
-        done = False
-        while not done:
-          action, log_std = agent(torch.as_tensor(states, dtype=torch.float32))
-          states, reward, ter, trun, _ = envs.step(action.detach().numpy())
-          steps += 1
-          done = any(ter or trun)
-          returns += reward
-      end_time = time.time()
-      fp32_time.append(end_time- start_time)
+      duration, returns, steps = eval(agent, seed, envs)
+      fp32_time.append(duration)
       fp32_return.append(returns/10)
       fp32_step.append(steps/10)
     print(f"#### Task: {args.env_id}")
@@ -196,3 +206,4 @@ if __name__ == "__main__":
     print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     |")
     print(f"| avg. ep length      | {np.mean(fp32_step):.2f} +/- {np.std(fp32_step):.2f}   |")
     envs.close()
+    csv_handler.save_data()

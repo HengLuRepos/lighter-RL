@@ -195,7 +195,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device("cuda:0" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
     envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
@@ -215,8 +215,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     qf1_target.load_state_dict(all_state_dict['q1_target'])
     qf2_target.load_state_dict(all_state_dict['q2_target'])
 
-    actor.qconfig = taq.qconfig.get_default_qat_qconfig(backend='qnnpack')
-    torch.backends.quantized.engine = 'qnnpack'
+    actor.qconfig = taq.qconfig.get_default_qat_qconfig(backend='x86')
+    torch.backends.quantized.engine = 'x86'
     taq.quantize_dtype = torch.qint8
     actor = torch.ao.quantization.prepare_qat(actor.to(device).train(), inplace=True)
     actor.train()
@@ -342,4 +342,4 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     envs.close()
     writer.close()
     actor_int8 = taq.convert(actor.eval().to('cpu'), inplace=False)
-    actor_int8.save_model(f"models/qat/sac-{args.env_id}-seed-{args.seed}-actor.pt")
+    actor_int8.save_model(f"models/qat/sac-{args.env_id}-seed-{args.seed}-actor-x86.pt")

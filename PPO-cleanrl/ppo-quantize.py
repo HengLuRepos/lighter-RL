@@ -175,7 +175,7 @@ if __name__ == "__main__":
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device("cuda:1" if torch.cuda.is_available() and args.cuda else "cpu")
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
@@ -185,8 +185,8 @@ if __name__ == "__main__":
 
     agent = Agent(envs).to(device)
     agent.load_model(f"models/ppo-{args.env_id}-seed-{args.seed}.pt")
-    agent.qconfig = taq.qconfig.get_default_qat_qconfig(backend='x86')
-    torch.backends.quantized.engine = 'x86'
+    agent.qconfig = taq.qconfig.get_default_qat_qconfig(backend='qnnpack')
+    torch.backends.quantized.engine = 'qnnpack'
     taq.quantize_dtype = torch.qint8
     agent_prepared = torch.ao.quantization.prepare_qat(agent.to(device).train(), inplace=False)
     agent_prepared.train()
@@ -344,4 +344,4 @@ if __name__ == "__main__":
     writer.close()
     agent_int8 = taq.convert(agent_prepared.eval().to('cpu'), inplace=False)
     agent_int8.eval()
-    agent_int8.save_model(f"models/qat/ppo-{args.env_id}-seed-{args.seed}-x86.pt")
+    agent_int8.save_model(f"models/qat/ppo-{args.env_id}-seed-{args.seed}.pt")

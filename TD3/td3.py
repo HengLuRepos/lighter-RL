@@ -218,8 +218,7 @@ class TwinDelayedDDPG(nn.Module):
             if t < self.config.start_steps:
                 action = self.env.action_space.sample()
             else:
-                state = torch.as_tensor(state, dtype=torch.float, device=self.device)
-                action = self.actor.explore(state).detach().cpu().numpy()
+                action = self.actor.explore(torch.as_tensor(state, dtype=torch.float, device=self.device)).detach().cpu().numpy()
             next_state, reward, terminated, truncated, _ = self.env.step(action)
             done = terminated or truncated
             self.buffer.remember(state, action, reward, next_state, done)

@@ -225,7 +225,8 @@ class TRPO(nn.Module):
     
     def train_agent(self):
         best_avg = None
-        for ep in range(self.config.num_epoch):
+        num_updates = self.config.max_timestamp // self.config.batch_size
+        for ep in range(num_updates):
             paths, episodic_rewards = self.sample_batch()
             states = np.concatenate([path["states"] for path in paths])
             actions = np.concatenate([path["actions"] for path in paths])

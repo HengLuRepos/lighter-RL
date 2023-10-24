@@ -2,7 +2,7 @@ from ddpg import DDPG
 from config import *
 import gymnasium as gym
 
-config = Walker2DConfig(1)
+config = InvertedDoublePendulumConfig(1)
 env = gym.make(config.env)
-agent = DDPG(env, config)
+agent = DDPG(env, config).to('cuda:1')
 agent.train_agent()

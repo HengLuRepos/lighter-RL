@@ -21,7 +21,7 @@ def fuse_modules(model):
     for p in list(model.modules())[1:]:
         fuse_modules(p)
 for i in range(len(seed)):
-    config = HalfCheetahConfig(seed[i])
+    config = InvertedDoublePendulumConfig(seed[i])
     env = gym.make(config.env)
     agent = TRPO(env, config)
     agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")
@@ -33,13 +33,14 @@ for i in range(len(seed)):
     origin_end = time.time()
 
     agent.eval()
-    agent.qconfig = get_default_qat_qconfig(backend='qnnpack')
-    torch.backends.quantized.engine = 'qnnpack'
+    agent.qconfig = get_default_qat_qconfig(backend='x86')
+    torch.backends.quantized.engine = 'x86'
     torch.ao.quantization.quantize_dtype = torch.qint8
-    fuse_modules(agent)
-    agent_prepared = torch.ao.quantization.prepare_qat(agent.to('cuda:1').train(), inplace=False)
+    #fuse_modules(agent)
+    agent_prepared = torch.ao.quantization.prepare_qat(agent.to('cuda:0').train(), inplace=False)
     agent_prepared.train()
-    for ep in range(10 * config.num_epoch):
+    num_updates = config.max_timestamp // config.batch_size
+    for ep in range(num_updates):
         paths, episodic_rewards = agent_prepared.sample_batch()
         states = np.concatenate([path["states"] for path in paths])
         actions = np.concatenate([path["actions"] for path in paths])
@@ -58,7 +59,7 @@ for i in range(len(seed)):
     # quant_start = time.time()
     # avg_return_int8, steps_quant = agent_int8.evaluation(seed=seed[i])
     # quant_end = time.time()
-    agent_int8.save_model(f"models/qat/trpo-{config.env_name}-default-{torch.backends.quantized.engine}-fuse.pt")
+    agent_int8.save_model(f"models/qat/trpo-{config.env_name}-default-{torch.backends.quantized.engine}.pt")
     # fp32_time.append(origin_end - origin_start)
     # int8_time.append(quant_end - quant_start)
     # fp32_return.append(avg_return)

@@ -21,7 +21,7 @@ def fuse_modules(model):
     for p in list(model.modules())[1:]:
         fuse_modules(p)
 for i in range(len(seed)):
-    config = AntConfig(seed[i])
+    config = HopperConfig(seed[i])
     env = gym.make(config.env)
     agent = TwinDelayedDDPG(env, config)
     agent.load_model(f"models/TD3-{config.env_name}-seed-1.pt")
@@ -33,8 +33,8 @@ for i in range(len(seed)):
     origin_end = time.time()
 
     agent.eval()
-    agent.qconfig = get_default_qat_qconfig(backend='qnnpack')
-    torch.backends.quantized.engine = 'qnnpack'
+    agent.qconfig = get_default_qat_qconfig(backend='x86')
+    torch.backends.quantized.engine = 'x86'
     torch.ao.quantization.quantize_dtype = torch.qint8
     #fuse_modules(agent)
     agent_prepared = torch.ao.quantization.prepare_qat(agent.to('cuda:1').train(), inplace=False)

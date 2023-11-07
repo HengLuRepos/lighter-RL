@@ -117,15 +117,21 @@ class Actor(nn.Module):
         self.register_buffer(
             "action_bias", torch.tensor((env.action_space.high + env.action_space.low) / 2.0, dtype=torch.float32)
         )
+        self.quant_state = torch.ao.quantization.QuantStub()
+        self.dequant_mean = torch.ao.quantization.DeQuantStub()
+        self.dequant_std = torch.ao.quantization.DeQuantStub()
+
 
     def forward(self, x):
+        x = self.quant_state(x)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         mean = self.fc_mean(x)
         log_std = self.fc_logstd(x)
         log_std = torch.tanh(log_std)
+        mean = self.dequant_mean(mean)
+        log_std = self.dequant_std(log_std)
         log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
-
         return mean, log_std
 
     def get_action(self, x):
@@ -145,7 +151,7 @@ class Actor(nn.Module):
     def save_model(self, path):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location='cpu'))
 
 
 if __name__ == "__main__":

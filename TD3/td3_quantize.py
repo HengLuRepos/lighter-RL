@@ -296,4 +296,4 @@ class TwinDelayedDDPG(nn.Module):
     def save_model(self, path):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path,map_location='cpu'))

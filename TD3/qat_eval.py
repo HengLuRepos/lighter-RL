@@ -5,11 +5,6 @@ from td3_quantize import TwinDelayedDDPG
 import numpy as np
 import time
 from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig
-from torch.ao.quantization.fake_quantize import default_fused_act_fake_quant,default_fused_wt_fake_quant
-from torch.ao.quantization.observer import MovingAverageMinMaxObserver, default_per_channel_weight_observer
-from pyJoules.energy_meter import measure_energy
-from pyJoules.handler.csv_handler import CSVHandler
-csv_handler = CSVHandler(f'qat-result.csv')
 @measure_energy(handler=csv_handler)
 def eval(agent, seed):
     return agent.evaluation(seed)

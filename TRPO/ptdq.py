@@ -18,7 +18,7 @@ def fuse_modules(model):
     for p in list(model.modules())[1:]:
         fuse_modules(p)
 for i in range(len(seed)):
-    config = HalfCheetahConfig(seed[i])
+    config = AntConfig(seed[i])
     env = gym.make(config.env)
     agent = TRPO(env, config).to('cpu')
     agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")

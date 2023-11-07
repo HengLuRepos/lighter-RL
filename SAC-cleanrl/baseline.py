@@ -145,7 +145,7 @@ class Actor(nn.Module):
     def save_model(self, path):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location='cpu'))
 
 
 if __name__ == "__main__":
@@ -153,10 +153,6 @@ if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
-    from pyJoules.energy_meter import measure_energy
-    from pyJoules.handler.csv_handler import CSVHandler
-    csv_handler = CSVHandler(f'{args.env_id}-result.csv')
-    @measure_energy(handler=csv_handler)
     def eval(agent, seed, envs):
         steps = 0
         returns = 0
@@ -206,4 +202,4 @@ if __name__ == "__main__":
     print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     |")
     print(f"| avg. ep length      | {np.mean(fp32_step):.2f} +/- {np.std(fp32_step):.2f}   |")
     envs.close()
-    csv_handler.save_data()
+

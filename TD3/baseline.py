@@ -4,10 +4,7 @@ import gymnasium as gym
 from td3 import TwinDelayedDDPG
 import numpy as np
 import time
-from pyJoules.energy_meter import measure_energy
-from pyJoules.handler.csv_handler import CSVHandler
-csv_handler = CSVHandler(f'result.csv')
-@measure_energy(handler=csv_handler)
+
 def eval(agent, seed):
     return agent.evaluation(seed)
 
@@ -15,10 +12,12 @@ seed = [2,3,4,5,6,7,8,9,10,11]
 fp32_time = []
 fp32_step = []
 fp32_return = []
-config = HalfCheetahConfig(seed[0])
+config = AntConfig(seed[0])
 env = gym.make(config.env)
 agent = TwinDelayedDDPG(env, config).to('cpu')
 agent.load_model(f"models/TD3-{config.env_name}-seed-1.pt")
+
+
 for i in range(len(seed)):
     origin_start = time.time()
     avg_return, steps_origin = eval(agent, seed[i])
@@ -36,4 +35,4 @@ print(f"| avg. return         | {np.mean(fp32_return):.2f} +/- {np.std(fp32_retu
 print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     |")
 print(f"| avg. ep length      | {np.mean(fp32_step):.2f} +/- {np.std(fp32_step):.2f}   |")
 
-csv_handler.save_data()
+

@@ -69,6 +69,8 @@ def parse_args():
         help="the maximum norm for the gradient clipping")
     parser.add_argument("--target-kl", type=float, default=None,
         help="the target KL divergence threshold")
+    parser.add_argument("--layer-size", type=int, default=64,
+        help="hidden layer size")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -100,21 +102,21 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 
 
 class Agent(nn.Module):
-    def __init__(self, envs):
+    def __init__(self, envs, layer_size):
         super().__init__()
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
+            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), layer_size)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
+            layer_init(nn.Linear(layer_size, layer_size)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 1), std=1.0),
+            layer_init(nn.Linear(layer_size, 1), std=1.0),
         )
         self.actor_mean = nn.Sequential(
-            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
+            layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), layer_size)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, 64)),
+            layer_init(nn.Linear(layer_size, layer_size)),
             nn.Tanh(),
-            layer_init(nn.Linear(64, np.prod(envs.single_action_space.shape)), std=0.01),
+            layer_init(nn.Linear(layer_size, np.prod(envs.single_action_space.shape)), std=0.01),
         )
         self.actor_logstd = nn.Parameter(torch.zeros(1, np.prod(envs.single_action_space.shape)))
         self.quant_state = torch.ao.quantization.QuantStub()
@@ -167,9 +169,9 @@ if __name__ == "__main__":
     fp32_step = []
     fp32_return = []
 
-    agent = Agent(envs).to(device)
+    agent = Agent(envs, args.layer_size).to(device)
     agent.eval()
-    agent.qconfig = get_default_qat_qconfig(backend='qnnpack')
+    agent.qconfig = get_default_qat_qconfig(backend='x86')
     torch.backends.quantized.engine = 'x86'
     torch.ao.quantization.quantize_dtype = torch.qint8
     agent_prepared = torch.ao.quantization.prepare_qat(agent.train(), inplace=False)
@@ -186,8 +188,8 @@ if __name__ == "__main__":
       for i in range(args.update_epochs):
         done = False
         while not done:
-          action = agent_int8.actor_mean(torch.as_tensor(states, dtype=torch.float32)).detach().numpy()
-          states, reward, ter, trun, _ = envs.step(action)
+          action,_ = agent_int8(torch.as_tensor(states, dtype=torch.float32))
+          states, reward, ter, trun, _ = envs.step(action.detach().numpy())
           steps += 1
           done = any(ter or trun)
           returns += reward

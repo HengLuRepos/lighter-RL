@@ -13,7 +13,7 @@ fp32_return = []
 int8_return = []
 
 for i in range(len(seed)):
-    config = HumanoidStandupConfig(seed[i])
+    config = AntConfig(seed[i])
     env = gym.make(config.env)
     td3 = DDPG(env, config)
     td3.load_model(f"models/DDPG-{config.env_name}-seed-1.pt")

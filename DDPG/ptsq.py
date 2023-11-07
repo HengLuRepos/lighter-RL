@@ -13,7 +13,7 @@ def fuse_modules(model):
         model.fuse_modules()
     for p in list(model.modules())[1:]:
         fuse_modules(p)
-config = HumanoidStandupConfig(seed[0])
+config = AntConfig(seed[0])
 env = gym.make(config.env)
 agent = DDPG(env, config).to('cpu')
 agent.load_model(f"models/DDPG-{config.env_name}-seed-1.pt")

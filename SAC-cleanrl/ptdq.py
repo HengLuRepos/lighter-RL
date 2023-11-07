@@ -145,7 +145,7 @@ class Actor(nn.Module):
     def save_model(self, path):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location='cpu'))
 
 
 if __name__ == "__main__":
@@ -170,6 +170,9 @@ if __name__ == "__main__":
 
     agent = Actor(envs).to(device)
     agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
+    agent.qconfig = torch.ao.quantization.get_default_qconfig('x86')
+    torch.backends.quantized.engine = 'x86'
+    torch.ao.quantization.quantize_dtype = torch.qint8
     agent_int8 = torch.quantization.quantize_dynamic(
         agent,
         {torch.nn.Linear},

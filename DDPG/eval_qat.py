@@ -5,8 +5,6 @@ from ddpg_quantize import DDPG
 import numpy as np
 import time
 from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig
-from torch.ao.quantization.fake_quantize import default_fused_act_fake_quant,default_fused_wt_fake_quant
-from torch.ao.quantization.observer import MovingAverageMinMaxObserver, default_per_channel_weight_observer
 seed = [2,3,4,5,6,7,8,9,10,11]
 int8_time = []
 int8_step = []

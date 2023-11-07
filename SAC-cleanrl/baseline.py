@@ -64,6 +64,8 @@ def parse_args():
             help="Entropy regularization coefficient.")
     parser.add_argument("--autotune", type=lambda x:bool(strtobool(x)), default=True, nargs="?", const=True,
         help="automatic tuning of the entropy coefficient")
+    parser.add_argument("--layer-size", type=int, default=256,
+        help="hidden layer size")
     args = parser.parse_args()
     # fmt: on
     return args
@@ -85,11 +87,11 @@ def make_env(env_id, seed, idx, capture_video, run_name):
 
 # ALGO LOGIC: initialize agent here:
 class SoftQNetwork(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, layer_size):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc3 = nn.Linear(256, 1)
+        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), layer_size)
+        self.fc2 = nn.Linear(layer_size, layer_size)
+        self.fc3 = nn.Linear(layer_size, 1)
 
     def forward(self, x, a):
         x = torch.cat([x, a], 1)
@@ -104,12 +106,12 @@ LOG_STD_MIN = -5
 
 
 class Actor(nn.Module):
-    def __init__(self, env):
+    def __init__(self, env, layer_size):
         super().__init__()
-        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), 256)
-        self.fc2 = nn.Linear(256, 256)
-        self.fc_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
-        self.fc_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
+        self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod(), layer_size)
+        self.fc2 = nn.Linear(layer_size, layer_size)
+        self.fc_mean = nn.Linear(layer_size, np.prod(env.single_action_space.shape))
+        self.fc_logstd = nn.Linear(layer_size, np.prod(env.single_action_space.shape))
         # action rescaling
         self.register_buffer(
             "action_scale", torch.tensor((env.action_space.high - env.action_space.low) / 2.0, dtype=torch.float32)
@@ -186,7 +188,7 @@ if __name__ == "__main__":
     fp32_step = []
     fp32_return = []
 
-    agent = Actor(envs).to(device)
+    agent = Actor(envs, args.layer_size).to(device)
     agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:

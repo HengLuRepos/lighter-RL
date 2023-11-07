@@ -129,9 +129,9 @@ class Actor(nn.Module):
         mean = self.fc_mean(x)
         log_std = self.fc_logstd(x)
         log_std = torch.tanh(log_std)
-        log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
         mean = self.dequant_mean(mean)
         log_std = self.dequant_std(log_std)
+        log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
         return mean, log_std
 
     def get_action(self, x):
@@ -205,7 +205,7 @@ if __name__ == "__main__":
     agent_int8.eval()
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:
-      duration, returns, steps = eval(agent, seed, envs)
+      duration, returns, steps = eval(agent_int8, seed, envs)
       fp32_time.append(duration)
       fp32_return.append(returns/10)
       fp32_step.append(steps/10)

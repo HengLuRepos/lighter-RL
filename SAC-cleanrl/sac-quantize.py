@@ -92,13 +92,23 @@ class SoftQNetwork(nn.Module):
         self.fc1 = nn.Linear(np.array(env.single_observation_space.shape).prod() + np.prod(env.single_action_space.shape), layer_size)
         self.fc2 = nn.Linear(layer_size, layer_size)
         self.fc3 = nn.Linear(layer_size, 1)
+        self.quant_state = torch.ao.quantization.QuantStub()
+        self.quant_action = torch.ao.quantization.QuantStub()
+        self.dequant_q = torch.ao.quantization.DeQuantStub()
 
     def forward(self, x, a):
+        x = self.quant_state(x)
+        a = self.quant_action(a)
         x = torch.cat([x, a], 1)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
+        x = self.dequant_q(x)
         return x
+    def save_model(self, path):
+        torch.save(self.state_dict(), path)
+    def load_model(self, path):
+        self.load_state_dict(torch.load(path, map_location='cpu'))
 
 
 LOG_STD_MAX = 2
@@ -152,7 +162,7 @@ class Actor(nn.Module):
     def save_model(self, path):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location='cpu'))
 
 
 if __name__ == "__main__":
@@ -204,7 +214,7 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     qf2 = SoftQNetwork(envs, args.layer_size).to(device)
     qf1_target = SoftQNetwork(envs, args.layer_size).to(device)
     qf2_target = SoftQNetwork(envs, args.layer_size).to(device)
-    all_state_dict = torch.load(f"models/sac-{args.env_id}-seed-{args.seed}.pt")
+    all_state_dict = torch.load(f"models/sac-{args.env_id}-seed-{args.seed}.pt", map_location='cpu')
     actor.load_state_dict(all_state_dict['actor'])
     qf1.load_state_dict(all_state_dict['q1'])
     qf2.load_state_dict(all_state_dict['q2'])
@@ -215,7 +225,13 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     torch.backends.quantized.engine = 'x86'
     taq.quantize_dtype = torch.qint8
     actor = torch.ao.quantization.prepare_qat(actor.to(device).train(), inplace=True)
+    qf1 = torch.ao.quantization.prepare_qat(qf1.to(device).train(), inplace=True)
+    qf2 = torch.ao.quantization.prepare_qat(qf2.to(device).train(), inplace=True)
+    qf1_target = torch.ao.quantization.prepare_qat(qf1_target.to(device).train(), inplace=True)
+    qf2_target = torch.ao.quantization.prepare_qat(qf2_target.to(device).train(), inplace=True)
     actor.train()
+    qf1.train()
+    qf2.train()
 
     q_optimizer = optim.Adam(list(qf1.parameters()) + list(qf2.parameters()), lr=args.q_lr)
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.policy_lr)
@@ -338,4 +354,16 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     envs.close()
     writer.close()
     actor_int8 = taq.convert(actor.eval().to('cpu'), inplace=False)
+    qf1_int8 = taq.convert(qf1.eval().to('cpu'), inplace=False)
+    qf2_int8 = taq.convert(qf2.eval().to('cpu'), inplace=False)
+    qf1_target_int8 = taq.convert(qf1_target.eval().to('cpu'), inplace=False)
+    qf2_target_int8 = taq.convert(qf2_target.eval().to('cpu'), inplace=False)
     actor_int8.save_model(f"models/qat/sac-{args.env_id}-seed-{args.seed}-actor-x86.pt")
+    all_state_dict = {
+        'actor': actor_int8.state_dict(),
+        'q1': qf1_int8.state_dict(),
+        'q2': qf2_int8.state_dict(),
+        'q1_target': qf1_target_int8.state_dict(),
+        'q2_target': qf2_target_int8.state_dict()
+    }
+    torch.save(all_state_dict, f"models/qat/sac-{args.env_id}-seed-{args.seed}-x86.pt")

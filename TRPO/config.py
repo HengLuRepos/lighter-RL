@@ -63,7 +63,7 @@ class AntConfig(Config):
         self.max_ep_len = 200
         self.num_epoch = 1000
         self.batch_size = 1000
-        self.layer_size = 128
+        self.layer_size = 64
         self.v_lr = 1e-3
 
 class HopperConfig(Config):
@@ -95,7 +95,7 @@ class HumanoidConfig(Config):
         self.max_ep_len = 1000
         self.num_epoch = 1000
         self.batch_size = 1000
-        self.layer_size = 256
+        self.layer_size = 128
         self.v_lr = 1e-3
 
 class HumanoidStandupConfig(Config):

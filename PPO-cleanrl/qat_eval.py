@@ -199,7 +199,7 @@ if __name__ == "__main__":
       fp32_step.append(steps/args.update_epochs)
     print(f"#### Task: {args.env_id}")
     print()
-    print("|                     | int8               |")
+    print("|                     | QAT               |")
     print("|---------------------|--------------------|")
     print(f"| avg. return         | {np.mean(fp32_return):.2f} +/- {np.std(fp32_return):.2f}  |")
     print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     |")

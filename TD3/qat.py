@@ -37,7 +37,7 @@ for i in range(len(seed)):
     torch.backends.quantized.engine = 'x86'
     torch.ao.quantization.quantize_dtype = torch.qint8
     #fuse_modules(agent)
-    agent_prepared = torch.ao.quantization.prepare_qat(agent.to('cuda:1').train(), inplace=False)
+    agent_prepared = torch.ao.quantization.prepare_qat(agent.to('cuda').train(), inplace=False)
     agent_prepared.train()
     episode_reward = 0
     episode_timesteps = 0

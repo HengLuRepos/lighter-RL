@@ -14,6 +14,7 @@ from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 import torch.ao.quantization as taq
 from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig
+import psutil
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
@@ -192,7 +193,7 @@ if __name__ == "__main__":
     fp32_time = []
     fp32_step = []
     fp32_return = []
-
+    fp32_ram = []
     agent = Actor(envs, args.layer_size).to(device)
     agent.eval()
     agent.qconfig = get_default_qat_qconfig(backend='x86')
@@ -206,6 +207,7 @@ if __name__ == "__main__":
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:
       duration, returns, steps = eval(agent_int8, seed, envs)
+      fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
       fp32_time.append(duration)
       fp32_return.append(returns/10)
       fp32_step.append(steps/10)
@@ -216,5 +218,6 @@ if __name__ == "__main__":
     print(f"| avg. return         | {np.mean(fp32_return):.2f} +/- {np.std(fp32_return):.2f}  |")
     print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     |")
     print(f"| avg. ep length      | {np.mean(fp32_step):.2f} +/- {np.std(fp32_step):.2f}   |")
+    print(f"{np.mean(fp32_ram):.2f} +/- {np.std(fp32_ram):.2f} MB")
     envs.close()
 

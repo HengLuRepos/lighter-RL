@@ -13,7 +13,7 @@ import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 from torch.distributions.normal import Normal
-
+import psutil
 
 def parse_args():
     # fmt: off
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     fp32_time = []
     fp32_step = []
     fp32_return = []
-
+    fp32_ram = []
     agent = Actor(envs, args.layer_size).to(device)
     agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
     agent.qconfig = torch.ao.quantization.get_default_qconfig('x86')
@@ -188,6 +188,7 @@ if __name__ == "__main__":
         agent_prepared(torch.as_tensor(state, dtype=torch.float))
         state = env_temp.observation_space.sample()
     agent_int8 = torch.ao.quantization.convert(agent_prepared)
+    agent_int8.save_model(f"models/static_quantize/ppo-{args.env_id}.pt")
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:
       steps = 0
@@ -203,6 +204,7 @@ if __name__ == "__main__":
           done = any(ter or trun)
           returns += reward
       end_time = time.time()
+      fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
       fp32_time.append(end_time- start_time)
       fp32_return.append(returns/10)
       fp32_step.append(steps/10)
@@ -213,4 +215,5 @@ if __name__ == "__main__":
     print(f"| avg. return         | {np.mean(fp32_return):.2f} +/- {np.std(fp32_return):.2f}  |")
     print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     |")
     print(f"| avg. ep length      | {np.mean(fp32_step):.2f} +/- {np.std(fp32_step):.2f}   |")
+    print(f"{np.mean(fp32_ram):.2f} +/- {np.std(fp32_ram):.2f} MB")
     envs.close()

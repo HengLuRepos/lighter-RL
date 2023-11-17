@@ -5,6 +5,7 @@ from trpo import TRPO
 import numpy as np
 import time
 import argparse
+import psutil
 env_map = {
     "HalfCheetah-v4": HalfCheetahConfig,
     "Humanoid-v4": HumanoidConfig,
@@ -31,6 +32,7 @@ int8_time = []
 int8_step = []
 #fp32_return = []
 int8_return = []
+fp32_ram = []
 def fuse_modules(model):
     if hasattr(model, 'fuse_modules'):
         model.fuse_modules()
@@ -57,12 +59,13 @@ for _ in range(1000):
     agent_prepared(torch.as_tensor(state[None,:], dtype=torch.float, device=agent_prepared.device))
     state = env_temp.observation_space.sample()
 agent_int8 = torch.ao.quantization.convert(agent_prepared)
+agent_int8.save_model(f"models/static_quantize/trpo-{config.env_name}.pt")
 for i in range(len(seed)):
     
     quant_start = time.time()
     avg_return_int8, steps_quant = agent_int8.evaluation(seed=seed[i])
     quant_end = time.time()
-    agent_int8.save_model(f"models/static_quantize/trpo-{config.env_name}.pt")
+    fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
     #fp32_time.append(origin_end - origin_start)
     int8_time.append(quant_end - quant_start)
     #fp32_return.append(avg_return)
@@ -78,3 +81,4 @@ print(f"| avg. return         | {np.mean(int8_return):.2f} +/- {np.std(int8_retu
 print(f"| avg. inference time | {np.mean(int8_time):.2f} +/- {np.std(int8_time):.2f}      |")
 print(f"| avg. ep length      | {np.mean(int8_step):.2f} +/- {np.std(int8_step):.2f}  |")
 
+print(f"{np.mean(fp32_ram):.2f} +/- {np.std(fp32_ram):.2f} MB")

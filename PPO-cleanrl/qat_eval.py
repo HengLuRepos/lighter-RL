@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.distributions.normal import Normal
 from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig
-
+import psutil
 
 def parse_args():
     # fmt: off
@@ -168,7 +168,7 @@ if __name__ == "__main__":
     fp32_time = []
     fp32_step = []
     fp32_return = []
-
+    fp32_ram = []
     agent = Agent(envs, args.layer_size).to(device)
     agent.eval()
     agent.qconfig = get_default_qat_qconfig(backend='x86')
@@ -194,6 +194,7 @@ if __name__ == "__main__":
           done = any(ter or trun)
           returns += reward
       end_time = time.time()
+      fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
       fp32_time.append(end_time- start_time)
       fp32_return.append(returns/args.update_epochs)
       fp32_step.append(steps/args.update_epochs)
@@ -204,4 +205,5 @@ if __name__ == "__main__":
     print(f"| avg. return         | {np.mean(fp32_return):.2f} +/- {np.std(fp32_return):.2f}  |")
     print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     |")
     print(f"| avg. ep length      | {np.mean(fp32_step):.2f} +/- {np.std(fp32_step):.2f}   |")
+    print(f"{np.mean(fp32_ram):.2f} +/- {np.std(fp32_ram):.2f} MB")
     envs.close()

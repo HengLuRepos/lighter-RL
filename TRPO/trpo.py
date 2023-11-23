@@ -265,9 +265,9 @@ class TRPO(nn.Module):
               ep_reward += reward
               done = terminated or truncated
               steps += 1
-        print("---------------------------------------")
+        """print("---------------------------------------")
         print(f"Evaluation over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
-        print("---------------------------------------")
+        print("---------------------------------------")"""
         return ep_reward/self.config.eval_epochs, steps/self.config.eval_epochs
     
     def save_model(self, path):

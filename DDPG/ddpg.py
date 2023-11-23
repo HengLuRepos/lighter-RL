@@ -239,9 +239,9 @@ class DDPG(nn.Module):
                 steps += 1
             state, _ = env.reset()
             done = False
-        print("---------------------------------------")
+        """print("---------------------------------------")
         print(f"Evaluation over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
-        print("---------------------------------------")
+        print("---------------------------------------")"""
         return ep_reward/self.config.eval_epochs, steps/self.config.eval_epochs
     
     def save_model(self, path):

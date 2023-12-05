@@ -69,6 +69,8 @@ def parse_args():
         help="hidden layer size")
     parser.add_argument("--prune-amount", type=float, default=0.1,
         help="the id of the environment")
+    parser.add_argument("--dim", type=int, default=1)
+    parser.add_argument("--n",type=int,default=2)
     args = parser.parse_args()
     # fmt: on
     return args
@@ -196,7 +198,8 @@ if __name__ == "__main__":
     for name, module in agent.named_modules():
     # prune 20% of connections in all 2D-conv layers
         if isinstance(module, torch.nn.Linear):
-            tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
+            #tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
+            tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:
       duration, returns, steps = eval(agent, seed, envs)
@@ -204,13 +207,7 @@ if __name__ == "__main__":
       fp32_time.append(duration)
       fp32_return.append(returns/10)
       fp32_step.append(steps/10)
-    print(f"#### Task: {args.env_id}")
-    print()
-    print(f"|                     | {args.prune_amount}               |")
-    print("|---------------------|--------------------|")
-    print(f"| avg. return         | {np.mean(fp32_return):.2f} +/- {np.std(fp32_return):.2f}  |")
-    print(f"| avg. inference time |  {np.mean(fp32_time):.2f} +/- {np.std(fp32_time):.2f}     |")
-    print(f"| avg. ep length      | {np.mean(fp32_step):.2f} +/- {np.std(fp32_step):.2f}   |")
-    print(f"{np.mean(fp32_ram):.2f} +/- {np.std(fp32_ram):.2f} MB")
+    print(f"{np.mean(fp32_return):.2f},{np.std(fp32_return):.2f},{np.mean(fp32_time):.2f},{np.std(fp32_time):.2f},{np.mean(fp32_step):.2f},{np.std(fp32_step):.2f},{np.mean(fp32_ram):.2f},{np.std(fp32_ram):.2f}")
+
     envs.close()
 

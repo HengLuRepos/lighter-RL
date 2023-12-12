@@ -43,7 +43,7 @@ class HalfCheetahConfig(Config):
         self.max_ep_len = 150
         self.num_epoch = 150
         self.batch_size = 30000
-        self.layer_size = 256
+        self.layer_size = 64
         self.v_lr = 0.02
         self.pi_lr = 0.02
 

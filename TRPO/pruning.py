@@ -45,8 +45,8 @@ agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")
 for name, module in agent.actor.named_modules():
     # prune 20% of connections in all 2D-conv layers
     if isinstance(module, torch.nn.Linear):
-        #tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
-        tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
+        tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
+        #tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
 for seed in eval_seed:
     steps = 0
     returns = 0

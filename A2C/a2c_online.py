@@ -66,7 +66,7 @@ class A2C(nn.Module):
     def forward(self, state):
         return self.actor(state)[0]
     
-    def evaluation(self, t):
+    def evaluation(self):
         env = gym.make(self.config.env)
         ep_reward = 0
         state, _ = env.reset(seed = self.config.seed + 100)
@@ -79,14 +79,16 @@ class A2C(nn.Module):
               ep_reward += reward
               done = terminated or truncated
         print("---------------------------------------")
-        print(f"Evaluation at timestep {t} over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
+        print(f"Evaluation over {self.config.eval_epochs} episodes: {ep_reward/self.config.eval_epochs:.3f}")
         print("---------------------------------------")
+        return ep_reward
 
     def train_agent(self):
         state, _ = self.env.reset()
         done = False
         all_ep_rewards = []
         ep_reward = 0
+        best_reward = None
         for t in range(self.config.max_timestamp):
             mu, std = self.actor(np2torch(state))
             dist = ptd.MultivariateNormal(loc=mu, scale_tril=torch.diag(std))
@@ -104,7 +106,7 @@ class A2C(nn.Module):
             self.critic_optim.zero_grad()
             loss_critic.backward()
             self.critic_optim.step()
-
+            
             #update actor
             #log_prob = -torch.log(std) - torch.log(2 * torch.tensor(torch.pi)).to(device) / 2 - ((action - mu)**2)/(2*std**2)
             #log_prob -= (2*(np.log(2) - action - torch.nn.functional.softplus(-2*action))).sum()
@@ -121,11 +123,13 @@ class A2C(nn.Module):
                 print(f"Episode {len(all_ep_rewards)} return: {ep_reward:.3f}")
                 ep_reward = 0
             if (t + 1) % self.config.eval_freq == 0:
-                self.evaluation(t)
-                self.save_model(f"models/a2c-{self.config.env_name}-seed-{self.seed}.pt")
+                rw = self.evaluation()
+                self.save_model(f"models/a2c-{self.config.env}-seed-{self.seed}.pt")
+                if best_reward is None or rw >= best_reward:
+                    self.save_model(f"models/a2c-{self.config.env}-seed-{self.seed}-best.pt")
                 
     def save_model(self, path):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
-        self.load_state_dict(torch.load(path))
+        self.load_state_dict(torch.load(path, map_location='cpu'))
             

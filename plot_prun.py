@@ -20,28 +20,46 @@ for file in files:
     data = pd.read_csv(path, header=None)
     x = data[0].values
     avg = data[1].values
+    avg_std = data[2].values
+    avg_std /= avg[0]
     avg /= avg[0]
     time = data[3].values
+    time_std = data[4].values
+    time_std /= time[0]
+    time /= time[0]
     leng = data[5].values
+    leng_std = data[6].values
+    leng_std /= leng[0]
+    leng /= leng[0]
     ram = data[7].values
+    ram /= ram[0]
     plt.figure()
     plt.plot(x, avg)
+    plt.fill_between(x, avg - avg_std, avg + avg_std, alpha=0.5)
     plt.xlabel("pruning amount")
     plt.ylabel("scaled average return")
-    plt.savefig(f"{args.algs}/figs/{file}-return.png")
+    plt.title(f"{file}-return")
+    plt.savefig(f"{args.algs}/figs/{file}-l2-scaled return.png")
     plt.figure()
     plt.plot(x, time)
+    plt.fill_between(x, time - time_std, time + time_std, alpha=0.5)
     plt.xlabel("pruning amount")
     plt.ylabel("inference time")
-    plt.savefig(f"{args.algs}/figs/{file}-time.png")
+    plt.title(f"{file}-time")
+    plt.savefig(f"{args.algs}/figs/{file}-l2-scaled inference time.png")
     plt.figure()
     plt.plot(x, leng)
+    plt.fill_between(x, leng - leng_std, leng + leng_std, alpha=0.5)
     plt.xlabel("pruning amount")
     plt.ylabel("episode length")
-    plt.savefig(f"{args.algs}/figs/{file}-ep.png")
+    plt.title(f"{file}-ep-length")
+    plt.savefig(f"{args.algs}/figs/{file}-l2-scaled ep length.png")
     plt.figure()
     plt.plot(x, ram)
     plt.xlabel("pruning amount")
     plt.ylabel("ram usage")
-    plt.savefig(f"{args.algs}/figs/{file}-ran.png")
+    plt.title(f"{file}-ram")
+    plt.savefig(f"{args.algs}/figs/{file}-l2-scaled ram usage.png")
+
+
     

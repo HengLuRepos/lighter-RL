@@ -7,6 +7,6 @@ envs=("HalfCheetah-v4" "HumanoidStandup-v4" "Ant-v4")
 
 for folder in "${folders[@]}"; do
     for env in "${envs[@]}"; do
-        python plot_quant.py --env-id "$env" --algs "$folder"
+        python plot.py --algs "$folder"
     done
 done

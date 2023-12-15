@@ -16,7 +16,7 @@ def parse_args():
 args = parse_args()
 files = [f"{args.env_id}", f"{args.env_id}-dim0"]
 for file in files:
-    path = f"{args.algs}/csv/{file}.csv"
+    path = f"{args.algs}/csv/{file}-l2.csv"
     data = pd.read_csv(path, header=None)
     x = data[0].values
     avg = data[1].values

@@ -1,9 +1,9 @@
 #!/bin/bash
 
-folders=("DDPG" "TD3" "SAC-cleanrl" "PPO-cleanrl" "TRPO")
+folders=("DDPG" "TD3" "SAC-cleanrl" "PPO-cleanrl" "TRPO" "TD3-cleanrl" "DDPG-cleanrl")
 
 
-envs=("HalfCheetah-v4" "HumanoidStandup-v4" "Ant-v4")
+envs=("Humanoid-v4" "Hopper-v4")
 
 for folder in "${folders[@]}"; do
 	if [ -d "$folder" ]; then

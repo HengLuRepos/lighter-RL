@@ -169,8 +169,8 @@ poetry run pip install "stable_baselines3==2.0.0a1"
     for name, module in agent.named_modules():
     # prune 20% of connections in all 2D-conv layers
         if isinstance(module, torch.nn.Linear):
-            #tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
-            tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
+            tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
+            #tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:
       duration, returns, steps = eval(agent, seed, envs)

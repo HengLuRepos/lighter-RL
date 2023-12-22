@@ -14,14 +14,14 @@ def parse_args():
     return args
 args = parse_args()
 
-fig, axs = plt.subplots(3, sharex=True)
-fig.suptitle(f"{args.algs} l2(dim1) avg return")
+fig, axs = plt.subplots(5, sharex=True)
+fig.suptitle(f"{args.algs} l1 avg return")
 fig.supxlabel("prune amount")
 fig.supylabel("scaled average return")
-envs = ["HalfCheetah-v4", "HumanoidStandup-v4", "Ant-v4"]
+envs = ["HalfCheetah-v4", "HumanoidStandup-v4", "Ant-v4", "Hopper-v4", "Humanoid-v4"]
 methods = ("Baseline", "PTDQ", "PTSQ", "QAT")
 for idx, env in enumerate(envs):
-  path = f"{args.algs}/csv/{env}.csv"
+  path = f"{args.algs}/csv/{env}-l1.csv"
   data = pd.read_csv(path, header=None)
   x = data[0].values
   avg = data[1].values
@@ -30,6 +30,8 @@ for idx, env in enumerate(envs):
   avg /= avg[0]
   
   axs[idx].plot(x, avg)
+  axs[idx].set_title(env)
   axs[idx].errorbar(x, avg, yerr=avg_std)
+fig.subplots_adjust(hspace=0.6)
 fig.legend()
-plt.savefig(f"figs/l2-dim1/{args.algs}-l2(dim1)-pruning-avg-return.png")
+plt.savefig(f"figs/l1/{args.algs}-l1-pruning-avg-return.png")

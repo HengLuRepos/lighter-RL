@@ -171,7 +171,7 @@ class DDPG(nn.Module):
         self.actor_optim.step()
     
     def forward(self, state):
-        out = self.actor(out)
+        out = self.actor(state)
         return out
     
     def train_agent(self):

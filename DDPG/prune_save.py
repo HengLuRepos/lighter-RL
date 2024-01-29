@@ -43,8 +43,10 @@ agent.load_model(f"models/DDPG-{config.env_name}-seed-1.pt")
 agent.eval()
 
 example_inputs = torch.as_tensor(env.observation_space.sample()[np.newaxis,:], dtype=torch.float)
-imp = tp.importance.MagnitudeImportance(p=args.n)
-
+if args.n == 1:
+    imp = tp.importance.MagnitudeImportance(p=args.n, normalizer=None, group_reduction="first")
+else:
+    imp = tp.importance.MagnitudeImportance(p=args.n, normalizer='max', group_reduction="first")
 pruner = tp.pruner.MagnitudePruner(
     agent,
     example_inputs,
@@ -54,6 +56,5 @@ pruner = tp.pruner.MagnitudePruner(
 )
 pruner.step()
 agent.zero_grad()
-print(agent)
 torch.save(agent, f"models/pruning/DDPG-{config.env_name}-{args.prune_amount}-l{args.n}.pth")
 torch.onnx.export(agent, example_inputs, f"models/pruning/DDPG-{config.env_name}-{args.prune_amount}-l{args.n}.onnx")

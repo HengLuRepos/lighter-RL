@@ -6,7 +6,7 @@ import numpy as np
 import time
 import argparse
 import psutil
-import torch.nn.utils.prune as tp 
+import torch_pruning as tp 
 
 env_map = {
     "HalfCheetah-v4": HalfCheetahConfig,
@@ -38,14 +38,8 @@ fp32_step = []
 fp32_return = []
 fp32_ram = []
 eval_seed = [2,3,4,5,6,7,8,9,10,11]
-agent = TwinDelayedDDPG(env,config)
-agent.load_model(f"models/TD3-{config.env_name}-seed-1.pt")
+agent = torch.load(f"models/pruning/TD3-{config.env_name}-{args.prune_amount}-l{args.n}.pth")
 
-for name, module in agent.actor.named_modules():
-    # prune 20% of connections in all 2D-conv layers
-    if isinstance(module, torch.nn.Linear):
-        #tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
-        tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
 env.reset(seed=eval_seed[0]+100)
 for i in range(10):
     origin_start = time.time()

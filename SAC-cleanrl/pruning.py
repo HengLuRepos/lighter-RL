@@ -14,7 +14,7 @@ import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 import psutil
-import torch.nn.utils.prune as tp 
+import torch_pruning as tp 
 
 def parse_args():
     # fmt: off
@@ -192,13 +192,8 @@ if __name__ == "__main__":
     fp32_step = []
     fp32_return = []
     fp32_ram = []
-    agent = Actor(envs, args.layer_size).to(device)
-    agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
-    for name, module in agent.named_modules():
-    # prune 20% of connections in all 2D-conv layers
-        if isinstance(module, torch.nn.Linear):
-            #tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
-            tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
+    agent = torch.load(f"models/pruning/SAC-{args.env_id}-{args.prune_amount}-l{args.n}.pth")
+
     seeds = [2,3,4,5,6,7,8,9,10,11]
     states, _ = envs.reset(seed=seeds[0] + 100)
     for i in range(10):

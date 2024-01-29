@@ -4,3 +4,5 @@ results/
 A3C/
 .ipynb_checkpoints/
 *.ipynb
+.history/
+.lh/

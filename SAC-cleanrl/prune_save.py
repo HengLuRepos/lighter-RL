@@ -14,7 +14,7 @@ import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 import psutil
-import torch.nn.utils.prune as tp 
+import torch_pruning as tp 
 
 def parse_args():
     # fmt: off
@@ -195,11 +195,23 @@ if __name__ == "__main__":
     fp32_ram = []
     agent = Actor(envs, args.layer_size).to(device)
     agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
-    for name, module in agent.named_modules():
-    # prune 20% of connections in all 2D-conv layers
-        if isinstance(module, torch.nn.Linear):
-            tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
-            #tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
-    agent.save_model(f"models/pruning/sac-{args.env_id}-{args.prune_amount}-l1.pt")
+    agent.eval()
+    if args.n == 1:
+        imp = tp.importance.MagnitudeImportance(p=args.n, normalizer=None, group_reduction="first")
+    else:
+        imp = tp.importance.MagnitudeImportance(p=args.n, normalizer='max', group_reduction="first")
+    states, _ = envs.reset()
+    example_inputs = torch.as_tensor(states, dtype=torch.float)
+    pruner = tp.pruner.MagnitudePruner(
+        agent,
+        example_inputs,
+        imp,
+        pruning_ratio=args.prune_amount,
+        ignored_layers=[agent.fc_mean,agent.fc_logstd]
+    )
+    pruner.step()
+    agent.zero_grad()
+    torch.save(agent, f"models/pruning/SAC-{args.env_id}-{args.prune_amount}-l{args.n}.pth")
+    torch.onnx.export(agent, example_inputs, f"models/pruning/SAC-{args.env_id}-{args.prune_amount}-l{args.n}.onnx")
     envs.close()
 

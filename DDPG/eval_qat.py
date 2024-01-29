@@ -45,13 +45,23 @@ agent_int8 = torch.ao.quantization.convert(agent_prepared.eval(), inplace=False)
 del agent, agent_prepared
 agent_int8.load_model(f"models/qat/DDPG-{config.env_name}-default-x86.pt")
 agent_int8.eval()
-for i in range(len(seed)):
+env.reset(seed=seed[0]+100)
+for i in range(10):
     quant_start = time.time()
-    avg_return_int8, steps_quant = agent_int8.evaluation(seed[i])
+    state, _ = env.reset()
+    done = False
+    r = 0.0
+    step = 0
+    while not done:
+        action = agent_int8(torch.as_tensor(state[None,:], dtype=torch.float)).detach().cpu().numpy().squeeze(axis=0)
+        state, reward, terminated, truncated, _ = env.step(action)
+        r += reward
+        done = terminated or truncated
+        step += 1
     quant_end = time.time()
     int8_time.append(quant_end - quant_start)
-    int8_return.append(avg_return_int8)
-    int8_step.append(steps_quant)
+    int8_return.append(r)
+    int8_step.append(step)
     int8_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
 print(f"{np.mean(int8_return):.2f},{np.std(int8_return):.2f},{np.mean(int8_time):.2f},{np.std(int8_time):.2f},{np.mean(int8_step):.2f},{np.std(int8_step):.2f},{np.mean(int8_ram):.2f},{np.std(int8_ram):.2f}")
 

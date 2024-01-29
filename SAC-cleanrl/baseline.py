@@ -155,19 +155,18 @@ if __name__ == "__main__":
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
-    def eval(agent, seed, envs):
+    def eval(agent, envs):
         steps = 0
         returns = 0
         start_time = time.time()
-        states, _ = envs.reset(seed=seed + 100)
-        for i in range(10):
-            done = False
-            while not done:
-                action, log_std = agent(torch.as_tensor(states, dtype=torch.float32))
-                states, reward, ter, trun, _ = envs.step(action.detach().numpy())
-                steps += 1
-                done = any(ter or trun)
-                returns += reward
+        states, _ = envs.reset()
+        done = False
+        while not done:
+            action, log_std = agent(torch.as_tensor(states, dtype=torch.float32))
+            states, reward, ter, trun, _ = envs.step(action.detach().numpy())
+            steps += 1
+            done = any(ter or trun)
+            returns += reward
         end_time = time.time()
         return end_time- start_time, returns, steps
 
@@ -191,12 +190,13 @@ if __name__ == "__main__":
     agent = Actor(envs, args.layer_size).to(device)
     agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
     seeds = [2,3,4,5,6,7,8,9,10,11]
-    for seed in seeds:
-      duration, returns, steps = eval(agent, seed, envs)
+    states, _ = envs.reset(seed=seeds[0] + 100)
+    for i in range(10):
+      duration, returns, steps = eval(agent, envs)
       fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
       fp32_time.append(duration)
-      fp32_return.append(returns/10)
-      fp32_step.append(steps/10)
+      fp32_return.append(returns)
+      fp32_step.append(steps)
     print(f"{np.mean(fp32_return):.2f},{np.std(fp32_return):.2f},{np.mean(fp32_time):.2f},{np.std(fp32_time):.2f},{np.mean(fp32_step):.2f},{np.std(fp32_step):.2f},{np.mean(fp32_ram):.2f},{np.std(fp32_ram):.2f}")
 
     envs.close()

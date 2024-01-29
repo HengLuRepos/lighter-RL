@@ -46,15 +46,23 @@ for name, module in agent.actor.named_modules():
     if isinstance(module, torch.nn.Linear):
         #tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
         tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
-for seed in eval_seed:
-    steps = 0
-    returns = 0
-    start_time = time.time()
-    returns, steps = agent.evaluation(seed=seed)
-    end_time = time.time()
+env.reset(seed=eval_seed[0]+100)
+for i in range(10):
+    origin_start = time.time()
+    state, _ = env.reset()
+    done = False
+    r = 0.0
+    step = 0
+    while not done:
+        action = agent(torch.as_tensor(state, dtype=torch.float)).detach().cpu().numpy()
+        state, reward, terminated, truncated, _ = env.step(action)
+        r += reward
+        done = terminated or truncated
+        step += 1
+    origin_end = time.time()
+    fp32_return.append(r)
+    fp32_time.append(origin_end - origin_start)
+    fp32_step.append(step)
     fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
-    fp32_time.append(end_time- start_time)
-    fp32_return.append(returns)
-    fp32_step.append(steps)
 print(f"{np.mean(fp32_return):.2f},{np.std(fp32_return):.2f},{np.mean(fp32_time):.2f},{np.std(fp32_time):.2f},{np.mean(fp32_step):.2f},{np.std(fp32_step):.2f},{np.mean(fp32_ram):.2f},{np.std(fp32_ram):.2f}")
 

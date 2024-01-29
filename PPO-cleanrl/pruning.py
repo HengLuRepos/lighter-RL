@@ -177,24 +177,25 @@ if __name__ == "__main__":
             tp.l1_unstructured(module, name='weight', amount=args.prune_amount)
             #tp.ln_structured(module, name='weight', amount=args.prune_amount, dim=args.dim, n=args.n)
     seeds = [2,3,4,5,6,7,8,9,10,11]
-    for seed in seeds:
+    states, _ = envs.reset(seed=seeds[0] + 100)
+    for i in range(10):
+      seed = seeds[0]
       steps = 0
       returns = 0
       start_time = time.time()
-      states, _ = envs.reset(seed=seed + 100)
-      for i in range(args.update_epochs):
-        done = False
-        while not done:
-          action = agent.actor_mean(torch.as_tensor(states, dtype=torch.float32)).detach().numpy()
-          states, reward, ter, trun, _ = envs.step(action)
-          steps += 1
-          done = any(ter or trun)
-          returns += reward
+      states, _ = envs.reset()
+      done = False
+      while not done:
+        action = agent.actor_mean(torch.as_tensor(states, dtype=torch.float32)).detach().numpy()
+        states, reward, ter, trun, _ = envs.step(action)
+        steps += 1
+        done = any(ter or trun)
+        returns += reward
       end_time = time.time()
       fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
       fp32_time.append(end_time- start_time)
-      fp32_return.append(returns/args.update_epochs)
-      fp32_step.append(steps/args.update_epochs)
+      fp32_return.append(returns)
+      fp32_step.append(steps)
     print(f"{np.mean(fp32_return):.2f},{np.std(fp32_return):.2f},{np.mean(fp32_time):.2f},{np.std(fp32_time):.2f},{np.mean(fp32_step):.2f},{np.std(fp32_step):.2f},{np.mean(fp32_ram):.2f},{np.std(fp32_ram):.2f}")
 
     envs.close()

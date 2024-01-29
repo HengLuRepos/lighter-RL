@@ -39,14 +39,24 @@ agent = TwinDelayedDDPG(env, config).to('cpu')
 agent.load_model(f"models/TD3-{config.env_name}-seed-1.pt")
 
 
-for i in range(len(seed)):
+env.reset(seed=seed[0]+100)
+for i in range(10):
     origin_start = time.time()
-    avg_return, steps_origin = eval(agent, seed[i])
+    state, _ = env.reset()
+    done = False
+    r = 0.0
+    step = 0
+    while not done:
+        action = agent(torch.as_tensor(state, dtype=torch.float)).detach().cpu().numpy()
+        state, reward, terminated, truncated, _ = env.step(action)
+        r += reward
+        done = terminated or truncated
+        step += 1
     origin_end = time.time()
-    fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
+    fp32_return.append(r)
     fp32_time.append(origin_end - origin_start)
-    fp32_return.append(avg_return)
-    fp32_step.append(steps_origin)
+    fp32_step.append(step)
+    fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
 
 print(f"{np.mean(fp32_return):.2f},{np.std(fp32_return):.2f},{np.mean(fp32_time):.2f},{np.std(fp32_time):.2f},{np.mean(fp32_step):.2f},{np.std(fp32_step):.2f},{np.mean(fp32_ram):.2f},{np.std(fp32_ram):.2f}")
 

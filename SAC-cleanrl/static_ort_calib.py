@@ -14,6 +14,8 @@ import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 import psutil
+import onnxruntime as ort
+from onnxruntime.quantization import CalibrationDataReader, quantize_static
 
 def parse_args():
     # fmt: off
@@ -128,8 +130,8 @@ class Actor(nn.Module):
         log_std = torch.tanh(log_std)
         log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
 
-        return mean, log_std
-
+        return mean
+    
     def get_action(self, x):
         mean, log_std = self(x)
         std = log_std.exp()
@@ -187,14 +189,71 @@ if __name__ == "__main__":
     fp32_step = []
     fp32_return = []
     fp32_ram = []
-    agent = Actor(envs, args.layer_size).to(device)
-    agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
-    states, _ = envs.reset()
-    torch.onnx.export(agent, torch.as_tensor(states, dtype=torch.float),f"models/SAC-{args.env_id}-seed-1.onnx")
     seeds = [2,3,4,5,6,7,8,9,10,11]
+    origin_session = ort.InferenceSession(f"models/SAC-{args.env_id}-seed-1.onnx", providers=ort.get_available_providers())
+    all_steps = 0
+    states = []
+    state, _ = envs.reset(seed=seeds[0]+100)
+    states.append(state)
+    while all_steps < 10000:
+        input_name = origin_session.get_inputs()[0].name
+        action = origin_session.run(None, {input_name: state.astype(np.float32)})[0]
+        state, reward, terminated, truncated, _ = envs.step(action)
+        states.append(state)
+        all_steps += 1
+        if terminated or truncated:
+            state, _ = envs.reset()
+            states.append(state)
+    states = np.vstack(states)
+
+
+    class QuntizationDataReader(CalibrationDataReader):
+        def __init__(self, states, batch_size, input_name):
+
+            self.torch_dl = torch.as_tensor(states, dtype=torch.float)
+
+            self.input_name = input_name
+            self.datasize = len(self.torch_dl)
+
+            self.enum_data = iter(self.torch_dl)
+
+        def to_numpy(self, pt_tensor):
+            return pt_tensor.detach().cpu().numpy() if pt_tensor.requires_grad else pt_tensor.cpu().numpy()
+
+        def get_next(self):
+            batch = next(self.enum_data, None)
+            if batch is not None:
+                return {self.input_name: self.to_numpy(batch)[None,:]}
+            else:
+                return None
+
+        def rewind(self):
+            self.enum_data = iter(self.torch_dl)
+    qdr = QuntizationDataReader(states, batch_size=64, input_name=origin_session.get_inputs()[0].name)
+    static_opts = {"ActivationSymmetric":False,
+                 "WeightSymmetric":True}
+    
+    quantized_model = quantize_static(model_input=f"models/onnxQuant/SAC-{args.env_id}-prep.onnx", 
+                                      model_output=f"models/onnxQuant/SAC-{args.env_id}-static.onnx",
+                                      calibration_data_reader=qdr,
+                                      extra_options=static_opts)
+    session = ort.InferenceSession(f"models/onnxQuant/SAC-{args.env_id}-static.onnx", providers=ort.get_available_providers())
+    input_name = session.get_inputs()[0].name
     states, _ = envs.reset(seed=seeds[0] + 100)
     for i in range(10):
-      duration, returns, steps = eval(agent, envs)
+      start_time = time.time()
+      states, _ = envs.reset()
+      steps = 0
+      returns = 0
+      done = False
+      while not done:
+          action = session.run(None, {input_name: states.astype(np.float32)})[0]
+          states, reward, terminated, truncated, _ = envs.step(action)
+          returns += reward
+          done = any(terminated or truncated)
+          steps += 1
+      end_time = time.time()
+      duration = end_time - start_time
       fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
       fp32_time.append(duration)
       fp32_return.append(returns)

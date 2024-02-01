@@ -1,4 +1,3 @@
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/ppo/#ppo_continuous_actionpy
 import argparse
 import os
 import random
@@ -13,8 +12,9 @@ import torch.nn.functional as F
 import torch.optim as optim
 from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
+import torch.ao.quantization as taq
+from torch.ao.quantization.qconfig import QConfig, get_default_qat_qconfig
 import psutil
-
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
@@ -119,15 +119,20 @@ class Actor(nn.Module):
         self.register_buffer(
             "action_bias", torch.tensor((env.action_space.high + env.action_space.low) / 2.0, dtype=torch.float32)
         )
+        self.quant_state = torch.ao.quantization.QuantStub()
+        self.dequant_mean = torch.ao.quantization.DeQuantStub()
+        self.dequant_std = torch.ao.quantization.DeQuantStub()
 
     def forward(self, x):
+        x = self.quant_state(x)
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         mean = self.fc_mean(x)
         log_std = self.fc_logstd(x)
         log_std = torch.tanh(log_std)
+        mean = self.dequant_mean(mean)
+        log_std = self.dequant_std(log_std)
         log_std = LOG_STD_MIN + 0.5 * (LOG_STD_MAX - LOG_STD_MIN) * (log_std + 1)  # From SpinUp / Denis Yarats
-
         return mean, log_std
 
     def get_action(self, x):
@@ -147,29 +152,31 @@ class Actor(nn.Module):
     def save_model(self, path):
         torch.save(self.state_dict(), path)
     def load_model(self, path):
-        self.load_state_dict(torch.load(path, map_location='cpu'))
+        self.load_state_dict(torch.load(path))
 
 
 if __name__ == "__main__":
-
     args = parse_args()
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
-    def eval(agent, envs):
+
+    def eval(agent, seed, envs):
         steps = 0
         returns = 0
         start_time = time.time()
-        states, _ = envs.reset()
-        done = False
-        while not done:
-            action, log_std = agent(torch.as_tensor(states, dtype=torch.float32))
-            states, reward, ter, trun, _ = envs.step(action.detach().numpy())
-            steps += 1
-            done = any(ter or trun)
-            returns += reward
+        states, _ = envs.reset(seed=seed + 100)
+        for i in range(10):
+            done = False
+            while not done:
+                action, log_std = agent(torch.as_tensor(states, dtype=torch.float32))
+                states, reward, ter, trun, _ = envs.step(action.detach().numpy())
+                steps += 1
+                done = any(ter or trun)
+                returns += reward
         end_time = time.time()
         return end_time- start_time, returns, steps
 
+    
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -188,18 +195,15 @@ if __name__ == "__main__":
     fp32_return = []
     fp32_ram = []
     agent = Actor(envs, args.layer_size).to(device)
-    agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
+    agent.eval()
+    agent.qconfig = get_default_qat_qconfig(backend='x86')
+    torch.backends.quantized.engine = 'x86'
+    torch.ao.quantization.quantize_dtype = torch.qint8
+    agent_prepared = torch.ao.quantization.prepare_qat(agent.train(), inplace=False)
+    agent_prepared.train()
+    agent_int8 = torch.ao.quantization.convert(agent_prepared.eval(), inplace=False)
+    agent_int8.load_model(f"models/qat/sac-{args.env_id}-seed-{args.seed}-actor-x86.pt")
+    agent_int8.eval()
     states, _ = envs.reset()
-    torch.onnx.export(agent, torch.as_tensor(states, dtype=torch.float),f"models/SAC-{args.env_id}-seed-1.onnx")
+    torch.onnx.export(agent_int8, torch.as_tensor(states, dtype=torch.float), f"models/onnxQuant/SAC-{args.env_id}-v4-qat.onnx")
     seeds = [2,3,4,5,6,7,8,9,10,11]
-    states, _ = envs.reset(seed=seeds[0] + 100)
-    for i in range(10):
-      duration, returns, steps = eval(agent, envs)
-      fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
-      fp32_time.append(duration)
-      fp32_return.append(returns)
-      fp32_step.append(steps)
-    print(f"{np.mean(fp32_return):.2f},{np.std(fp32_return):.2f},{np.mean(fp32_time):.2f},{np.std(fp32_time):.2f},{np.mean(fp32_step):.2f},{np.std(fp32_step):.2f},{np.mean(fp32_ram):.2f},{np.std(fp32_ram):.2f}")
-
-    envs.close()
-

@@ -1,11 +1,13 @@
-from config import *
-import torch
+import onnxruntime as ort
+import torch 
 import gymnasium as gym
-from ddpg import DDPG
+from config import *
+from trpo import TRPO
 import numpy as np
 import time
 import argparse
 import psutil
+from onnxruntime.quantization import quantize_dynamic, QuantType
 env_map = {
     "HalfCheetah-v4": HalfCheetahConfig,
     "Humanoid-v4": HumanoidConfig,
@@ -32,10 +34,10 @@ fp32_return = []
 fp32_ram = []
 config = cfg(seed[0])
 env = gym.make(config.env)
-agent = DDPG(env, config).to('cpu')
-agent.load_model(f"models/DDPG-{config.env_name}-seed-1.pt")
+quantized_model = quantize_dynamic(f"models/onnxQuant/TRPO-{config.env_name}-prep.onnx", f"models/onnxQuant/TRPO-{config.env_name}-dyna.onnx")
+session = ort.InferenceSession(f"models/onnxQuant/TRPO-{config.env_name}-dyna.onnx", providers=ort.get_available_providers())
+input_name = session.get_inputs()[0].name
 state, info = env.reset(seed=seed[0]+100)
-torch.onnx.export(agent, torch.as_tensor(state[None,:], dtype=torch.float),f"models/DDPG-{config.env_name}-seed-1.onnx")
 with torch.no_grad():
     for i in range(10):
         origin_start = time.time()
@@ -44,14 +46,15 @@ with torch.no_grad():
         r = 0.0
         step = 0
         while not done:
-            action = agent(torch.as_tensor(state, dtype=torch.float)).detach().cpu().numpy()
-            state, reward, terminated, truncated, _ = env.step(action)
+            action = session.run(None, {input_name: state[None,:].astype(np.float32)})[0]
+            state, reward, terminated, truncated, _ = env.step(action[0])
             r += reward
             done = terminated or truncated
             step += 1
-        origin_end = time.time()
+            origin_end = time.time()
         fp32_return.append(r)
         fp32_time.append(origin_end - origin_start)
         fp32_step.append(step)
         fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
     print(f"{np.mean(fp32_return):.2f},{np.std(fp32_return):.2f},{np.mean(fp32_time):.2f},{np.std(fp32_time):.2f},{np.mean(fp32_step):.2f},{np.std(fp32_step):.2f},{np.mean(fp32_ram):.2f},{np.std(fp32_ram):.2f}")
+

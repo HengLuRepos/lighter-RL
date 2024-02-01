@@ -1,11 +1,12 @@
-from config import *
-import torch
+import onnxruntime as ort
 import gymnasium as gym
+from config import *
 from trpo import TRPO
 import numpy as np
 import time
 import argparse
 import psutil
+from onnxruntime.quantization import CalibrationDataReader, quantize_static
 env_map = {
     "HalfCheetah-v4": HalfCheetahConfig,
     "Humanoid-v4": HumanoidConfig,
@@ -25,17 +26,16 @@ def parse_args():
     return args
 args = parse_args()
 cfg = env_map[args.env_id]
-seed = [2,3,4,5,6,7,8,9,10,11]
+seed = [2]
 fp32_time = []
 fp32_step = []
 fp32_return = []
 fp32_ram = []
 config = cfg(seed[0])
 env = gym.make(config.env)
-agent = TRPO(env, config).to('cpu')
-agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")
-state, _ = env.reset(seed=seed[0]+100)
-torch.onnx.export(agent, torch.as_tensor(state[None,:], dtype=torch.float),f"models/TRPO-{config.env_name}-seed-1.onnx")
+session = ort.InferenceSession(f"models/onnxQuant/TRPO-{config.env_name}-static.onnx", providers=ort.get_available_providers())
+input_name = session.get_inputs()[0].name
+state, info = env.reset(seed=seed[0]+100)
 for i in range(10):
     origin_start = time.time()
     state, _ = env.reset()
@@ -43,12 +43,12 @@ for i in range(10):
     r = 0.0
     step = 0
     while not done:
-        action = agent(torch.as_tensor(state, dtype=torch.float)).detach().cpu().numpy()
-        state, reward, terminated, truncated, _ = env.step(action)
+        action = session.run(None, {input_name: state[None,:].astype(np.float32)})[0]
+        state, reward, terminated, truncated, _ = env.step(action[0])
         r += reward
         done = terminated or truncated
         step += 1
-    origin_end = time.time()
+        origin_end = time.time()
     fp32_return.append(r)
     fp32_time.append(origin_end - origin_start)
     fp32_step.append(step)

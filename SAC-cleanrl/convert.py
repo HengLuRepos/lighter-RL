@@ -205,5 +205,4 @@ if __name__ == "__main__":
     agent_int8.load_model(f"models/qat/sac-{args.env_id}-seed-{args.seed}-actor-x86.pt")
     agent_int8.eval()
     states, _ = envs.reset()
-    torch.onnx.export(agent_int8, torch.as_tensor(states, dtype=torch.float), f"models/onnxQuant/SAC-{args.env_id}-v4-qat.onnx")
-    seeds = [2,3,4,5,6,7,8,9,10,11]
+    torch.onnx.export(agent_int8, torch.as_tensor(states, dtype=torch.float), f"models/onnxQuant/SAC-{args.env_id}-qat.onnx")

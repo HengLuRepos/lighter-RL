@@ -34,7 +34,7 @@ fp32_return = []
 fp32_ram = []
 config = cfg(seed[0])
 env = gym.make(config.env)
-origin_session = ort.InferenceSession(f"models/DDPG-{config.env_name}-seed-1.onnx", providers=ort.get_available_providers())
+origin_session = ort.InferenceSession(f"models/DDPG-{config.env}.onnx", providers=ort.get_available_providers())
 
 all_steps = 0
 states = []
@@ -78,11 +78,11 @@ qdr = QuntizationDataReader(states, batch_size=64, input_name=origin_session.get
 q_static_opts = {"ActivationSymmetric":False,
                  "WeightSymmetric":True}
 
-quantized_model = quantize_static(model_input=f"models/onnxQuant/DDPG-{config.env_name}-prep.onnx", 
-                                  model_output=f"models/onnxQuant/DDPG-{config.env_name}-static.onnx",
+quantized_model = quantize_static(model_input=f"models/onnxQuant/DDPG-{config.env}-prep.onnx", 
+                                  model_output=f"models/onnxQuant/DDPG-{config.env}-static.onnx",
                                   calibration_data_reader=qdr,
                                   extra_options=q_static_opts)
-session = ort.InferenceSession(f"models/onnxQuant/DDPG-{config.env_name}-static.onnx", providers=ort.get_available_providers())
+session = ort.InferenceSession(f"models/onnxQuant/DDPG-{config.env}-static.onnx", providers=ort.get_available_providers())
 input_name = session.get_inputs()[0].name
 state, info = env.reset(seed=seed[0]+100)
 with torch.no_grad():

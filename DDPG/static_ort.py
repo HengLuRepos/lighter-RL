@@ -33,7 +33,7 @@ fp32_return = []
 fp32_ram = []
 config = cfg(seed[0])
 env = gym.make(config.env)
-session = ort.InferenceSession(f"models/onnxQuant/DDPG-{config.env_name}-static.onnx", providers=ort.get_available_providers())
+session = ort.InferenceSession(f"models/onnxQuant/DDPG-{config.env}-static.onnx", providers=ort.get_available_providers())
 input_name = session.get_inputs()[0].name
 state, info = env.reset(seed=seed[0]+100)
 for i in range(10):

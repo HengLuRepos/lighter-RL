@@ -2,7 +2,6 @@ import onnxruntime as ort
 import torch 
 import gymnasium as gym
 from config import *
-from trpo import TRPO
 import numpy as np
 import time
 import argparse
@@ -33,7 +32,7 @@ fp32_return = []
 fp32_ram = []
 config = cfg(seed[0])
 env = gym.make(config.env)
-session = ort.InferenceSession(f"models/TRPO-{config.env_name}-seed-1.onnx", providers=ort.get_available_providers())
+session = ort.InferenceSession(f"models/TRPO-{config.env}.onnx", providers=ort.get_available_providers())
 input_name = session.get_inputs()[0].name
 state, info = env.reset(seed=seed[0]+100)
 with torch.no_grad():

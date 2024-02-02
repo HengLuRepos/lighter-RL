@@ -34,8 +34,8 @@ fp32_return = []
 fp32_ram = []
 config = cfg(seed[0])
 env = gym.make(config.env)
-quantized_model = quantize_dynamic(f"models/onnxQuant/DDPG-{config.env_name}-prep.onnx", f"models/onnxQuant/DDPG-{config.env_name}-dyna.onnx")
-session = ort.InferenceSession(f"models/onnxQuant/DDPG-{config.env_name}-dyna.onnx", providers=ort.get_available_providers())
+quantized_model = quantize_dynamic(f"models/onnxQuant/DDPG-{config.env}-prep.onnx", f"models/onnxQuant/DDPG-{config.env}-dyna.onnx")
+session = ort.InferenceSession(f"models/onnxQuant/DDPG-{config.env}-dyna.onnx", providers=ort.get_available_providers())
 input_name = session.get_inputs()[0].name
 state, info = env.reset(seed=seed[0]+100)
 with torch.no_grad():

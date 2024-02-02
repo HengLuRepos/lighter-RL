@@ -190,7 +190,7 @@ if __name__ == "__main__":
     fp32_return = []
     fp32_ram = []
     seeds = [2,3,4,5,6,7,8,9,10,11]
-    origin_session = ort.InferenceSession(f"models/SAC-{args.env_id}-seed-1.onnx", providers=ort.get_available_providers())
+    origin_session = ort.InferenceSession(f"models/SAC-{args.env_id}.onnx", providers=ort.get_available_providers())
     all_steps = 0
     states = []
     state, _ = envs.reset(seed=seeds[0]+100)

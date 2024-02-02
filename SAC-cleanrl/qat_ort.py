@@ -189,7 +189,7 @@ if __name__ == "__main__":
     fp32_return = []
     fp32_ram = []
     seeds = [2,3,4,5,6,7,8,9,10,11]
-    session = ort.InferenceSession(f"models/onnxQuant/SAC-{args.env_id}-v4-qat.onnx", providers=ort.get_available_providers())
+    session = ort.InferenceSession(f"models/onnxQuant/SAC-{args.env_id}-qat.onnx", providers=ort.get_available_providers())
     input_name = session.get_inputs()[0].name
     states, _ = envs.reset(seed=seeds[0] + 100)
     for i in range(10):

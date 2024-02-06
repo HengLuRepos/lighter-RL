@@ -177,7 +177,7 @@ if __name__ == "__main__":
     agent_prepared = torch.ao.quantization.prepare_qat(agent.train(), inplace=False)
     agent_prepared.train()
     agent_int8 = torch.ao.quantization.convert(agent_prepared.eval(), inplace=False)
-    agent_int8.load_model(f"models/qat/ppo-{args.env_id}-seed-{args.seed}.pt")
+    agent_int8.load_model(f"models/qat/ppo-{args.env_id}-seed-{args.seed}-x86.pt")
     agent_int8.eval()    
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:

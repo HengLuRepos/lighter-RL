@@ -35,7 +35,6 @@ env = gym.make(config.env)
 agent = DDPG(env, config).to('cpu')
 agent.load_model(f"models/DDPG-{config.env_name}-seed-1.pt")
 state, info = env.reset(seed=seed[0]+100)
-torch.onnx.export(agent, torch.as_tensor(state[None,:], dtype=torch.float),f"models/DDPG-{config.env_name}-seed-1.onnx")
 with torch.no_grad():
     for i in range(10):
         origin_start = time.time()

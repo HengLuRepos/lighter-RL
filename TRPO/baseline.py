@@ -35,7 +35,6 @@ env = gym.make(config.env)
 agent = TRPO(env, config).to('cpu')
 agent.load_model(f"models/trpo-{config.env_name}-seed-1.pt")
 state, _ = env.reset(seed=seed[0]+100)
-torch.onnx.export(agent, torch.as_tensor(state[None,:], dtype=torch.float),f"models/TRPO-{config.env_name}-seed-1.onnx")
 for i in range(10):
     origin_start = time.time()
     state, _ = env.reset()

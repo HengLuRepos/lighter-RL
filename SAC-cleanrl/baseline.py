@@ -190,7 +190,6 @@ if __name__ == "__main__":
     agent = Actor(envs, args.layer_size).to(device)
     agent.load_model(f'models/sac-{args.env_id}-seed-{args.seed}-actor.pt')
     states, _ = envs.reset()
-    torch.onnx.export(agent, torch.as_tensor(states, dtype=torch.float),f"models/SAC-{args.env_id}-seed-1.onnx")
     seeds = [2,3,4,5,6,7,8,9,10,11]
     states, _ = envs.reset(seed=seeds[0] + 100)
     for i in range(10):

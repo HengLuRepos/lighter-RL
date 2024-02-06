@@ -21,7 +21,7 @@ def fuse_modules(model):
     for p in list(model.modules())[1:]:
         fuse_modules(p)
 for i in range(len(seed)):
-    config = HopperConfig(seed[i])
+    config = HumanoidConfig(seed[i])
     env = gym.make(config.env)
     agent = TwinDelayedDDPG(env, config)
     agent.load_model(f"models/TD3-{config.env_name}-seed-1.pt")

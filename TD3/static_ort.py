@@ -38,7 +38,7 @@ session = ort.InferenceSession(f"models/onnxQuant/TD3-{config.env}-static.onnx",
 input_name = session.get_inputs()[0].name
 state, info = env.reset(seed=seed[0]+100)
 with torch.no_grad():
-    for i in range(100):
+    for i in range(10):
         origin_start = time.time()
         state, _ = env.reset()
         done = False

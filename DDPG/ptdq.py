@@ -43,14 +43,25 @@ td3_int8 = torch.quantization.quantize_dynamic(
     dtype=torch.qint8
 )
 td3_int8.save_model(f"models/dynamic_quantize/DDPG-{config.env_name}.pt")
-for i in range(len(seed)):
+state, info = env.reset(seed=seed[0]+100)
+for i in range(10):
     quant_start = time.time()
-    avg_return_int8, steps_quant = td3_int8.evaluation()
+    state, _ = env.reset()
+    done = False
+    r = 0.0
+    step = 0
+    while not done:
+        action = td3_int8(torch.as_tensor(state, dtype=torch.float)).detach().cpu().numpy()
+        state, reward, terminated, truncated, _ = env.step(action)
+        r += reward
+        done = terminated or truncated
+        step += 1
+    
     quant_end = time.time()
 
     int8_time.append(quant_end - quant_start)
-    int8_return.append(avg_return_int8)
-    int8_step.append(steps_quant)
+    int8_return.append(r)
+    int8_step.append(step)
     int8_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
 
 print(f"{np.mean(int8_return):.2f},{np.std(int8_return):.2f},{np.mean(int8_time):.2f},{np.std(int8_time):.2f},{np.mean(int8_step):.2f},{np.std(int8_step):.2f},{np.mean(int8_ram):.2f},{np.std(int8_ram):.2f}")

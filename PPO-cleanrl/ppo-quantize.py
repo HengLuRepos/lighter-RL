@@ -69,6 +69,8 @@ def parse_args():
         help="the maximum norm for the gradient clipping")
     parser.add_argument("--target-kl", type=float, default=None,
         help="the target KL divergence threshold")
+    parser.add_argument("--layer-size", type=int, default=64,
+        help="hidden layer size")
     args = parser.parse_args()
     args.batch_size = int(args.num_envs * args.num_steps)
     args.minibatch_size = int(args.batch_size // args.num_minibatches)
@@ -92,8 +94,6 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
         env = gym.wrappers.TransformObservation(env, lambda obs: np.clip(obs, -10, 10))
         env = gym.wrappers.NormalizeReward(env, gamma=gamma)
         env = gym.wrappers.TransformReward(env, lambda reward: np.clip(reward, -10, 10))
-        parser.add_argument("--layer-size", type=int, default=64,
-        help="hidden layer size")
         return env
 
     return thunk
@@ -346,4 +346,4 @@ if __name__ == "__main__":
     writer.close()
     agent_int8 = taq.convert(agent_prepared.eval().to('cpu'), inplace=False)
     agent_int8.eval()
-    agent_int8.save_model(f"models/qat/ppo-{args.env_id}-seed-{args.seed}.pt")
+    agent_int8.save_model(f"models/qat/ppo-{args.env_id}-seed-{args.seed}-x86.pt")

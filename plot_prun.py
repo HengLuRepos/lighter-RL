@@ -10,13 +10,14 @@ def parse_args():
         help="the id of the environment")
     parser.add_argument("--algs", type=str, default="DDPG",
         help="the id of the environment")
+    parser.add_argument("--n", type=int, default=1)
     args = parser.parse_args()
     
     return args
 args = parse_args()
-files = [f"{args.env_id}", f"{args.env_id}-dim0"]
+files = [f"{args.env_id}"]
 for file in files:
-    path = f"{args.algs}/csv/{file}-l1.csv"
+    path = f"{args.algs}/csv/{file}-l{args.n}.csv"
     data = pd.read_csv(path, header=None)
     x = data[0].values
     avg = data[1].values
@@ -33,6 +34,8 @@ for file in files:
     leng /= leng[0]
     ram = data[7].values
     ram /= ram[0]
+    energy = data[8].values
+    energy /= energy[0]
     plt.figure()
     plt.plot(x, avg)
     #plt.fill_between(x, avg - avg_std, avg + avg_std, alpha=0.5)
@@ -40,7 +43,7 @@ for file in files:
     plt.xlabel("pruning amount")
     plt.ylabel("scaled average return")
     plt.title(f"{file}-return")
-    plt.savefig(f"{args.algs}/figs/{args.algs}-{file}-l1-scaled return.png")
+    plt.savefig(f"{args.algs}/figs/l{args.n}/{args.algs}-{file}-l{args.n}-scaled return.png")
     plt.figure()
     plt.plot(x, time)
     #plt.fill_between(x, time - time_std, time + time_std, alpha=0.5)
@@ -48,7 +51,7 @@ for file in files:
     plt.xlabel("pruning amount")
     plt.ylabel("inference time")
     plt.title(f"{file}-time")
-    plt.savefig(f"{args.algs}/figs/{args.algs}-{file}-l1-scaled inference time.png")
+    plt.savefig(f"{args.algs}/figs/l{args.n}/{args.algs}-{file}-l{args.n}-scaled inference time.png")
     plt.figure()
     plt.plot(x, leng)
     #plt.fill_between(x, leng - leng_std, leng + leng_std, alpha=0.5)
@@ -56,13 +59,19 @@ for file in files:
     plt.xlabel("pruning amount")
     plt.ylabel("episode length")
     plt.title(f"{file}-ep-length")
-    plt.savefig(f"{args.algs}/figs/{args.algs}-{file}-l1-scaled ep length.png")
+    plt.savefig(f"{args.algs}/figs/l{args.n}/{args.algs}-{file}-l{args.n}-scaled episodic length.png")
     plt.figure()
     plt.plot(x, ram)
     plt.xlabel("pruning amount")
     plt.ylabel("ram usage")
     plt.title(f"{file}-ram")
-    plt.savefig(f"{args.algs}/figs/{args.algs}-{file}-l1-scaled ram usage.png")
+    plt.savefig(f"{args.algs}/figs/l{args.n}/{args.algs}-{file}-l{args.n}-scaled ram usage.png")
+    plt.figure()
+    plt.plot(x, energy)
+    plt.xlabel("pruning amount")
+    plt.ylabel("energy usage")
+    plt.title(f"{file}-ram")
+    plt.savefig(f"{args.algs}/figs/l{args.n}/{args.algs}-{file}-l{args.n}-scaled energy usage.png")
 
 
     

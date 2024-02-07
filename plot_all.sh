@@ -12,5 +12,5 @@ for folder in "${folders[@]}"; do
     for env in "${envs[@]}"; do
         python plot_prun.py --algs "$folder" --env-id "$env" --n 1
         python plot_prun.py --algs "$folder" --env-id "$env" --n 2
-    doen
+    done
 done

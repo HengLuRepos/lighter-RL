@@ -22,8 +22,8 @@ for file in files:
     x = data[0].values
     avg = data[1].values
     avg_std = data[2].values
-    avg_std /= avg[0]
-    avg /= avg[0]
+    avg_std /= np.abs(avg[0])
+    avg /= np.abs(avg[0])
     time = data[3].values
     time_std = data[4].values
     time_std /= time[0]
@@ -34,7 +34,7 @@ for file in files:
     leng /= leng[0]
     ram = data[7].values
     ram /= ram[0]
-    energy = data[8].values
+    energy = data[9].values
     energy /= energy[0]
     plt.figure()
     plt.plot(x, avg)

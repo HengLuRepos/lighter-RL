@@ -19,7 +19,7 @@ args = parse_args()
 envs = ["HalfCheetah-v4", "HumanoidStandup-v4", "Ant-v4", "Hopper-v4", "Humanoid-v4"]
 methods = ("Baseline", "PTDQ", "PTSQ", "QAT")
 
-"""
+
 fig, axs = plt.subplots(5, sharex=True)
 fig.suptitle(f"{args.algs} l{args.n} avg return")
 fig.supxlabel("prune amount")
@@ -203,4 +203,4 @@ for idx, env in enumerate(envs):
 fig.subplots_adjust(hspace=0.6)
 fig.legend()
 plt.savefig(f"figs/onnxQuant/energy/{args.algs}-energy.png")
-
+"""

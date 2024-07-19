@@ -8,7 +8,7 @@ import argparse
 import psutil
 import torch_pruning as tp 
 from trpo import TRPO
-
+import onnxruntime as ort
 env_map = {
     "HalfCheetah-v4": HalfCheetahConfig,
     "Humanoid-v4": HumanoidConfig,
@@ -33,28 +33,31 @@ def parse_args():
 args = parse_args()
 cfg = env_map[args.env_id]
 config = cfg(1)
-env = gym.make(config.env)
+env = gym.make(config.env, render_mode="rgb_array")
 fp32_time = []
 fp32_step = []
 fp32_return = []
 fp32_ram = []
 eval_seed = [2,3,4,5,6,7,8,9,10,11]
 agent = torch.load(f"models/pruning/TRPO-{config.env_name}-{args.prune_amount}-l{args.n}.pth")
-
-
+session = ort.InferenceSession(f"models/pruning/TRPO-{config.env_name}-{args.prune_amount}-l{args.n}.onnx", providers=ort.get_available_providers())
+input_name = session.get_inputs()[0].name
 env.reset(seed=eval_seed[0]+100)
-for i in range(10):
+for i in range(1):
     origin_start = time.time()
+    env = gym.wrappers.RecordVideo(env=env, video_folder="video",name_prefix=f"TRPO-{config.env}-pruning")
+    env.start_video_recorder()
     state, _ = env.reset()
     done = False
     r = 0.0
     step = 0
     while not done:
-        action = agent(torch.as_tensor(state, dtype=torch.float)).detach().cpu().numpy()
-        state, reward, terminated, truncated, _ = env.step(action)
+        action = session.run(None, {input_name: state[None,:].astype(np.float32)})[0]
+        state, reward, terminated, truncated, _ = env.step(action[0])
         r += reward
         done = terminated or truncated
         step += 1
+    env.close_video_recorder()
     origin_end = time.time()
     fp32_return.append(r)
     fp32_time.append(origin_end - origin_start)

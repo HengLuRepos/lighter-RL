@@ -15,6 +15,7 @@ from stable_baselines3.common.buffers import ReplayBuffer
 from torch.utils.tensorboard import SummaryWriter
 import psutil
 import torch_pruning as tp 
+import onnxruntime as ort
 
 def parse_args():
     # fmt: off
@@ -33,7 +34,7 @@ def parse_args():
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
@@ -80,7 +81,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            env = gym.wrappers.RecordVideo(env, f"videos/SAC-{env_id}-pruning")
         else:
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -193,11 +194,24 @@ if __name__ == "__main__":
     fp32_return = []
     fp32_ram = []
     agent = torch.load(f"models/pruning/SAC-{args.env_id}-{args.prune_amount}-l{args.n}.pth")
-
+    session = ort.InferenceSession(f"models/pruning/SAC-{args.env_id}-{args.prune_amount}-l{args.n}.onnx", providers=ort.get_available_providers())
+    input_name = session.get_inputs()[0].name
     seeds = [2,3,4,5,6,7,8,9,10,11]
     states, _ = envs.reset(seed=seeds[0] + 100)
     for i in range(10):
-      duration, returns, steps = eval(agent, envs)
+      start_time = time.time()
+      states, _ = envs.reset()
+      steps = 0
+      returns = 0
+      done = False
+      while not done:
+          action = session.run(None, {input_name: states.astype(np.float32)})[0]
+          states, reward, terminated, truncated, _ = envs.step(action)
+          returns += reward
+          done = any(terminated or truncated)
+          steps += 1
+      end_time = time.time()
+      duration = end_time - start_time
       fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
       fp32_time.append(duration)
       fp32_return.append(returns)

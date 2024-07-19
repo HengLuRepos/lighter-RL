@@ -73,15 +73,15 @@ class TRPO(nn.Module):
         self.tol = self.config.tol
         self.backtrack_steps = self.config.backtrack_steps
 
-        self.quant_input = torch.ao.quantization.QuantStub()
-        self.dequant_output = torch.ao.quantization.DeQuantStub()
+        #self.quant_input = torch.ao.quantization.QuantStub()
+        #self.dequant_output = torch.ao.quantization.DeQuantStub()
 
         self.critic_optim = torch.optim.Adam(self.critic.parameters(), lr=self.config.v_lr)
     
     def forward(self, state):
-        out = self.quant_input(state)
-        out = self.actor(out)[0]
-        out = self.dequant_output(out)
+        #out = self.quant_input(state)
+        out = self.actor(state)[0]
+        #out = self.dequant_output(out)
         return out
     def to(self, device):
         model = super().to(device)

@@ -13,7 +13,7 @@ import torch.optim as optim
 from torch.distributions.normal import Normal
 import psutil
 import torch_pruning as tp 
-
+import onnxruntime as ort
 def parse_args():
     # fmt: off
     parser = argparse.ArgumentParser()
@@ -31,7 +31,7 @@ def parse_args():
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
@@ -86,6 +86,7 @@ def make_env(env_id, idx, capture_video, run_name, gamma):
     def thunk():
         if capture_video:
             env = gym.make(env_id, render_mode="rgb_array")
+            env = gym.wrappers.RecordVideo(env, f"videos/PPO-{env_id}-pruning")
         else:
             env = gym.make(env_id)
         env = gym.wrappers.FlattenObservation(env)  # deal with dm_control's Dict observation space
@@ -170,6 +171,8 @@ if __name__ == "__main__":
     fp32_return = []
     fp32_ram = []
     agent = torch.load(f"models/pruning/PPO-{args.env_id}-{args.prune_amount}-l{args.n}.pth")
+    session = ort.InferenceSession(f"models/pruning/PPO-{args.env_id}-{args.prune_amount}-l{args.n}.onnx", providers=ort.get_available_providers())
+    input_name = session.get_inputs()[0].name
     seeds = [2,3,4,5,6,7,8,9,10,11]
     states, _ = envs.reset(seed=seeds[0] + 100)
     for i in range(10):
@@ -180,7 +183,7 @@ if __name__ == "__main__":
       states, _ = envs.reset()
       done = False
       while not done:
-        action = agent.actor_mean(torch.as_tensor(states, dtype=torch.float32)).detach().numpy()
+        action = session.run(None, {input_name: states.astype(np.float32)})[0]
         states, reward, ter, trun, _ = envs.step(action)
         steps += 1
         done = any(ter or trun)

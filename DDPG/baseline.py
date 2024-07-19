@@ -31,13 +31,15 @@ fp32_step = []
 fp32_return = []
 fp32_ram = []
 config = cfg(seed[0])
-env = gym.make(config.env)
+env = gym.make(config.env,render_mode="rgb_array")
+env = gym.wrappers.RecordVideo(env=env, video_folder="./video",name_prefix=f"DDPG-{args.env_id}-baseline")
 agent = DDPG(env, config).to('cpu')
 agent.load_model(f"models/DDPG-{config.env_name}-seed-1.pt")
 state, info = env.reset(seed=seed[0]+100)
 with torch.no_grad():
-    for i in range(10):
+    for i in range(1):
         origin_start = time.time()
+        env.start_video_recorder()
         state, _ = env.reset()
         done = False
         r = 0.0
@@ -48,6 +50,7 @@ with torch.no_grad():
             r += reward
             done = terminated or truncated
             step += 1
+        env.close_video_recorder()
         origin_end = time.time()
         fp32_return.append(r)
         fp32_time.append(origin_end - origin_start)

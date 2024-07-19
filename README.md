@@ -9,7 +9,5 @@ TODO:
 - [x] DDPG
 - [x] TD3
 - [x] A2C
-- [ ] A3C
 - [x] SAC
-- [ ] SAC-Discrete
 - [x] TRPO

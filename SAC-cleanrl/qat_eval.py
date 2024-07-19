@@ -32,7 +32,7 @@ def parse_args():
         help="the wandb's project name")
     parser.add_argument("--wandb-entity", type=str, default=None,
         help="the entity (team) of wandb's project")
-    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=False, nargs="?", const=True,
+    parser.add_argument("--capture-video", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="whether to capture videos of the agent performances (check out `videos` folder)")
 
     # Algorithm specific arguments
@@ -75,7 +75,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
-            env = gym.wrappers.RecordVideo(env, f"videos/{run_name}")
+            env = gym.wrappers.RecordVideo(env, f"videos/SAC-{env_id}-qat-orig")
         else:
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -160,19 +160,18 @@ if __name__ == "__main__":
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
 
 
-    def eval(agent, seed, envs):
+    def eval(agent, envs):
         steps = 0
         returns = 0
         start_time = time.time()
-        states, _ = envs.reset(seed=seed + 100)
-        for i in range(10):
-            done = False
-            while not done:
-                action, log_std = agent(torch.as_tensor(states, dtype=torch.float32))
-                states, reward, ter, trun, _ = envs.step(action.detach().numpy())
-                steps += 1
-                done = any(ter or trun)
-                returns += reward
+        states, _ = envs.reset()
+        done = False
+        while not done:
+            action, log_std = agent(torch.as_tensor(states, dtype=torch.float32))
+            states, reward, ter, trun, _ = envs.step(action.detach().numpy())
+            steps += 1
+            done = any(ter or trun)
+            returns += reward
         end_time = time.time()
         return end_time- start_time, returns, steps
 
@@ -206,7 +205,7 @@ if __name__ == "__main__":
     agent_int8.eval()
     seeds = [2,3,4,5,6,7,8,9,10,11]
     for seed in seeds:
-      duration, returns, steps = eval(agent_int8, seed, envs)
+      duration, returns, steps = eval(agent, envs)
       fp32_ram.append(psutil.Process().memory_info().rss / (1024 * 1024))
       fp32_time.append(duration)
       fp32_return.append(returns/10)

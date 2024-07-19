@@ -58,4 +58,3 @@ pruner = tp.pruner.MagnitudePruner(
 pruner.step()
 agent.zero_grad()
 torch.save(agent, f"models/pruning/TRPO-{config.env_name}-{args.prune_amount}-l{args.n}.pth")
-torch.onnx.export(agent, example_inputs, f"models/pruning/TRPO-{config.env_name}-{args.prune_amount}-l{args.n}.onnx")
